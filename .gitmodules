@@ -1,0 +1,3 @@
+[submodule "ext/bliss"]
+	path = ext/bliss
+	url = git@bitbucket.org:AluruLab/bliss.git
