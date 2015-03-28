@@ -1,12 +1,17 @@
 //Includes
 #include <mpi.h>
 
+
 //File includes from BLISS
-#include "io/fastq_loader.hpp"
-#include "io/sequence_id_iterator.hpp"
-#include "io/sequence_iterator.hpp"
-#include "common/kmer.hpp"
-#include "common/base_types.hpp"
+#include <io/fastq_loader.hpp>
+#include <io/sequence_id_iterator.hpp>
+#include <io/sequence_iterator.hpp>
+#include <common/kmer.hpp>
+#include <common/kmer_iterators.hpp>
+#include <common/base_types.hpp>
+#include <iterators/transform_iterator.hpp>
+
+//Own includes
 
 
 
@@ -24,10 +29,9 @@
  * @note                    This function should be called by all MPI ranks
  */
 template <typename KmerType, typename Alphabet, typename T>
-void generateKmerVector(MPI_Comm comm, const std::string &filename
+void generateKmerVector(MPI_Comm comm, const std::string &filename,
                         T& localVector) 
 {
-
   /// DEFINE file loader.  this only provides the L1 blocks, not reads.
   using FileLoaderType = bliss::io::FASTQLoader<CharType, false, true>; // raw data type :  use CharType
 
@@ -53,52 +57,57 @@ void generateKmerVector(MPI_Comm comm, const std::string &filename
   int rank;
   MPI_Comm_rank(comm, &rank);
 
-  /// size of communicator
-  int commSize;
-  MPI_Comm_size(comm, &commSize);
-
   //==== create file Loader (single thread per MPI process)
   FileLoaderType loader(comm, filename);  // this handle is alive through the entire building process.
 
   //====  now process the file, one L1 block (block partition by MPI Rank) at a time
   typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
 
-  //Sanity check
-  if (partition.getRange().size() == 0) return;
-
-  //== process the chunk of data
-  SeqType read;
-
-  //==  and wrap the chunk inside an iterator that emits Reads.
-  SeqIterType seqs_start(parser, partition.begin(), partition.end(), partition.getRange().start);
-  SeqIterType seqs_end(partition.end());
-
-  //== loop over the reads
-  for (; seqs_start != seqs_end; ++seqs_start)
+  //Loop over all the L1 partitions
+  while(partition.getRange().size() > 0)
   {
-    // first get read
-    read = *seqs_start;
 
-    //Generate kmers out of the read and push to vector
-    
-    //Sanity check
-    if (read.seqBegin == read.seqEnd) return;
+    //== process the chunk of data
+    SeqType read;
 
-    //== transform ascii to coded value
-    BaseCharIterator charStart(read.seqBegin, bliss::common::ASCII2<Alphabet>());
-    BaseCharIterator charEnd(read.seqEnd, bliss::common::ASCII2<Alphabet>());
+    //==  and wrap the chunk inside an iterator that emits Reads.
+    //== instantiate a local parser on each rank
+    ParserType parser;
 
-    //== set up the kmer generating iterators.
-    KmerIterType start(charStart, true);
-    KmerIterType end(charEnd, false);
+    SeqIterType seqs_start(parser, partition.begin(), partition.end(), partition.getRange().start);
+    SeqIterType seqs_end(partition.end());
 
-    // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
-    for (; start != end; ++start)
+    //== loop over the reads
+    for (; seqs_start != seqs_end; ++seqs_start)
     {
-      //Insert kmer to vector
-      localVector.push_back(*start);
+      // first get read
+      read = *seqs_start;
+
+      //Generate kmers out of the read and push to vector
+
+      //Sanity check
+      if (read.seqBegin == read.seqEnd) continue;
+
+      //== transform ascii to coded value
+      BaseCharIterator charStart(read.seqBegin, bliss::common::ASCII2<Alphabet>());
+      BaseCharIterator charEnd(read.seqEnd, bliss::common::ASCII2<Alphabet>());
+
+      //== set up the kmer generating iterators.
+      KmerIterType start(charStart, true);
+      KmerIterType end(charEnd, false);
+
+      // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
+      for (; start != end; ++start)
+      {
+        //Insert kmer to vector
+        localVector.push_back(*start);
+      }
     }
+
+    partition = loader.getNextL1Block();
   }
+
+  std::cerr << "[generateKmerVector] Rank : " << rank << " parsed " << localVector.size() << " kmers\n";
 }
 
 
@@ -108,10 +117,17 @@ int main(int argc, char** argv)
   MPI_Init(&argc, &argv);
 
   //Specify the fileName
-  std::string filename = ""; 
+  std::string filename; 
+  if( argc == 2 ) {
+    filename = argv[1];
+  }
+  else {
+    std::cout << "Usage: mpirun -np 4 <executable> FASTQ_FILE\n";
+    return 1;
+  }
 
   //Specify Kmer Type
-  const kmerLength = 31;
+  const int kmerLength = 31;
   typedef bliss::common::DNA AlphabetType;
   typedef bliss::common::Kmer<kmerLength, AlphabetType, uint32_t> KmerType;
 
@@ -119,7 +135,7 @@ int main(int argc, char** argv)
   std::vector<KmerType> localVector;
 
   //Populate localVector for each rank
-  generateKmerVector<KmerType, AlphabetType> (MPI_COMM_WORLD, filename, localVector) 
+  generateKmerVector<KmerType, AlphabetType> (MPI_COMM_WORLD, filename, localVector); 
 
   MPI_Finalize();   
   return(0);
