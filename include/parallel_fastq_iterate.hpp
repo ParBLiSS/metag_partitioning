@@ -33,8 +33,9 @@
  * @note                    This function should be called by all MPI ranks
  */
 template <typename KmerType, typename Alphabet, typename T>
-void generateKmerVector(MPI_Comm comm, const std::string &filename,
-                        T& localVector) 
+void generateKmerVector(const std::string &filename,
+                        T& localVector,
+                        MPI_Comm comm = MPI_COMM_WORLD) 
 {
   /// DEFINE file loader.  this only provides the L1 blocks, not reads.
   using FileLoaderType = bliss::io::FASTQLoader<CharType, false, true>; // raw data type :  use CharType

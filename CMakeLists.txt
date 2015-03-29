@@ -55,6 +55,9 @@ add_subdirectory("${PROJECT_SOURCE_DIR}/ext/psac-copy")
 include_directories("${bliss_SOURCE_DIR}/src")
 include_directories("${bliss_BINARY_DIR}")
 
+include_directories("${psac_SOURCE_DIR}/include")
+include_directories("${psac_BINARY_DIR}")
+
 # add own subdirectories
 add_subdirectory("${PROJECT_SOURCE_DIR}/src")
 
