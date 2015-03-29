@@ -48,6 +48,7 @@ set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output director
 include_directories("${PROJECT_SOURCE_DIR}/include")
 
 add_subdirectory("${PROJECT_SOURCE_DIR}/ext/bliss")
+add_subdirectory("${PROJECT_SOURCE_DIR}/ext/psac-copy")
 
 #include_directories("${bliss_INCLUDE_DIRS}")
 # TODO: eventually make BLISS define its own include dirs

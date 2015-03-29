@@ -1,3 +1,6 @@
+#ifndef PARALLEL_FASTQ_ITERATE_HPP 
+#define PARALLEL_FASTQ_ITERATE_HPP 
+
 //Includes
 #include <mpi.h>
 
@@ -16,15 +19,16 @@
 
 
 /**
+ * @details
  * Generate a vector of kmers from FASTQ file for each MPI process
- * This vector will no doubt have duplicate entries
+ * This vector will no doubt have duplicate entries. Uses Tony's Bliss code
  * Approach to build the vector
  * 1. Define file blocks and iterators for each rank
  * 2. Within each rank, iterate over all the reads
  * 3. For each read, iterate over all the kmers and push them to vector
  * 4. Return the vector
  *
- * @tparam T                Type of vector to populate
+ * @tparam T                Type of vector to populate which should be std::vector of KmerType
  * @param[out] localVector  Reference of vector to populate
  * @note                    This function should be called by all MPI ranks
  */
@@ -109,3 +113,5 @@ void generateKmerVector(MPI_Comm comm, const std::string &filename,
 
   std::cerr << "[generateKmerVector] Rank : " << rank << " parsed " << localVector.size() << " kmers\n";
 }
+
+#endif
