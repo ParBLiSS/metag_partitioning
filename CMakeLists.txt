@@ -45,7 +45,10 @@ endif (MPI_FOUND)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib CACHE PATH "Output directory for libraries" )
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output directory for applications" )
 
+include_directories("${PROJECT_SOURCE_DIR}/include")
+
 add_subdirectory("${PROJECT_SOURCE_DIR}/ext/bliss")
+
 #include_directories("${bliss_INCLUDE_DIRS}")
 # TODO: eventually make BLISS define its own include dirs
 include_directories("${bliss_SOURCE_DIR}/src")
