@@ -36,6 +36,17 @@ int main(int argc, char** argv)
   //Assuming read count is less than 4 Billion
   typedef uint32_t ReadIdType;
 
+  //Know rank
+  int rank, commsize;
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+  MPI_Comm_rank(MPI_COMM_WORLD, &commsize);
+
+  if(!rank)
+  {
+    std::cout << "Runnning with " << commsize<< " processors.\n"; 
+    std::cout << "Filename : " <<  filename << "\n"; 
+  }
+  
 
   //Initialize the KmerVector
   typedef typename std::tuple<ReadIdType, KmerIdType, ReadIdType, ReadIdType> tuple_t;
@@ -66,11 +77,15 @@ int main(int argc, char** argv)
     //Check whether all processors are done
     MPI_Allreduce(&localKeepGoing, &keepGoing, 1, MPI_CHAR , MPI_MAX, MPI_COMM_WORLD);
     countIterations++;
+    if(!rank)
+      std::cout << "[RANK 0] : Iteration # " << countIterations <<"\n";
   }
 
   //printTuples(localVector);
 
-  std::cout << "Algorithm took " << countIterations << " iteration.\n"; 
+
+  if(!rank)
+    std::cout << "Algorithm took " << countIterations << " iteration.\n"; 
 
   MPI_Finalize();   
   return(0);
