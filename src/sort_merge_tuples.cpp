@@ -49,16 +49,24 @@ int main(int argc, char** argv)
 
   while(keepGoing)
   {
+    //Sort by reads
     sortTuples<0,2,false> (localVector);
+
+    //Sort by Kmers
     sortTuples<1,2,false> (localVector);
 
     //keepGoing will be updated here
     bool localKeepGoing;
+
+    //Sort by old partition ids
     sortTuples<3,2,true> (localVector, localKeepGoing);
 
+    //Check whether all processors are done
     MPI_Allreduce(&localKeepGoing, &keepGoing, 1, MPI_BYTE , MPI_LOR, MPI_COMM_WORLD);
     countIterations++;
   }
+
+  //printTuples(localVector);
 
   std::cout << "Algorithm took " << countIterations << " iteration.\n"; 
 

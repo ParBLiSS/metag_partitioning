@@ -8,6 +8,9 @@
 #include <mxx/sort.hpp> 
 #include <mxx/shift.hpp> 
 
+//Own includes
+#include "prettyprint.hpp"
+
 static bool dummyBool;
 
 /**
@@ -164,6 +167,22 @@ void sortTuples(std::vector<T>& localVector, bool& wasSortLayerUpdated = dummyBo
         }
       }
     }
+  }
+}
+
+//Prints out all the tuples on console
+//Not supposed to be used with large datasets
+template <typename T>
+void printTuples(std::vector<T>& localVector, MPI_Comm comm = MPI_COMM_WORLD)
+{
+  /// MPI rank within the communicator
+  int rank, commsize;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &commsize);
+
+  for(auto &eachTuple : localVector)
+  {
+    std::cout << rank << " : " << eachTuple << std::endl;
   }
 }
 
