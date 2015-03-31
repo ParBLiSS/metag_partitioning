@@ -39,7 +39,7 @@ int main(int argc, char** argv)
   //Know rank
   int rank, commsize;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_rank(MPI_COMM_WORLD, &commsize);
+  MPI_Comm_size(MPI_COMM_WORLD, &commsize);
 
   if(!rank)
   {
