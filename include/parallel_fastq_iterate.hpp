@@ -23,12 +23,13 @@
 
 /**
  * @details
- * Generate a vector of tuples(read, kmer, Pn, Pc) from FASTQ file for each MPI process
+ * Generate a vector of tuples(kmer, Pn, Pc) from FASTQ file for each MPI process
+ * Each Pn and Pc should by initialized with readIds
  * Uses Tony's Bliss code
  * Approach to build the vector
  * 1. Define file blocks and iterators for each rank
  * 2. Within each rank, iterate over all the reads
- * 3. For each read, iterate over all the reads and kmers in them and push them to vector
+ * 3. For each read, iterate over all the kmers in them and push them to vector
  * 4. Return the vector
  *
  * @tparam T                Type of vector to populate which should be std::vector of tuples
@@ -112,7 +113,7 @@ void generateReadKmerVector(const std::string &filename,
       {
         //Make tuple
         //getPrefix() on kmer gives a 64-bit prefix for hashing assuming 
-        auto tupleToInsert = std::make_tuple(readId, (*start).getPrefix(), readId, readId);
+        auto tupleToInsert = std::make_tuple((*start).getPrefix(), readId, readId);
 
         //Insert tuple to vector
         localVector.push_back(tupleToInsert);
@@ -140,9 +141,9 @@ void generateReadKmerVector(const std::string &filename,
   {
     for ( auto& eachTuple : localVector) 
     {
-      std::get<0>(eachTuple) = std::get<0>(eachTuple) + previousReadIdSum;
-      std::get<2>(eachTuple) = std::get<0>(eachTuple);
-      std::get<3>(eachTuple) = std::get<0>(eachTuple);
+      //Update Pn and Pc
+      std::get<1>(eachTuple) = std::get<1>(eachTuple) + previousReadIdSum;
+      std::get<2>(eachTuple) = std::get<1>(eachTuple);
     }
   }
 

@@ -27,7 +27,7 @@ int main(int argc, char** argv)
   //Specify Kmer Type
   const int kmerLength = 31;
   typedef bliss::common::DNA AlphabetType;
-  typedef bliss::common::Kmer<kmerLength, AlphabetType, uint32_t> KmerType;
+  typedef bliss::common::Kmer<kmerLength, AlphabetType, uint64_t> KmerType;
 
   //Assuming kmer-length is less than 32
   typedef uint64_t KmerIdType;
@@ -36,8 +36,8 @@ int main(int argc, char** argv)
   typedef uint32_t ReadIdType;
 
 
-  //Initialize the KmerVector
-  std::vector<std::tuple<ReadIdType, KmerIdType, ReadIdType, ReadIdType>> localVector;
+  typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType> tuple_t;
+  std::vector<tuple_t> localVector;
 
   //Populate localVector for each rank
   generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector); 
