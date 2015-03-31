@@ -7,8 +7,8 @@ add_executable(parallel_fastq_iterate run_fastq_iterate.cpp)
 target_link_libraries(parallel_fastq_iterate ${EXTRA_LIBS})
 target_link_libraries(parallel_fastq_iterate bliss-common)
 
-add_executable(build_Kmer_tuples build_Kmer_tuples.cpp)
-target_link_libraries(build_Kmer_tuples ${EXTRA_LIBS})
-target_link_libraries(build_Kmer_tuples bliss-common)
+add_executable(sort_merge_tuples sort_merge_tuples.cpp)
+target_link_libraries(sort_merge_tuples ${EXTRA_LIBS})
+target_link_libraries(sort_merge_tuples bliss-common)
 
 

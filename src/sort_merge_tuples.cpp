@@ -1,12 +1,12 @@
 //Includes
 #include <mpi.h>
 
-
 //File includes from BLISS
 #include <common/kmer.hpp>
 #include <common/base_types.hpp>
 
 //Own includes
+#include "sortTuples.hpp"
 #include "parallel_fastq_iterate.hpp"
 
 int main(int argc, char** argv)
@@ -32,17 +32,39 @@ int main(int argc, char** argv)
   //Assuming kmer-length is less than 32
   typedef uint64_t KmerIdType;
 
-  //Assuming read cout is less than 4 Billion
+  //Assuming read count is less than 4 Billion
   typedef uint32_t ReadIdType;
 
 
   //Initialize the KmerVector
-  std::vector<std::tuple<ReadIdType, KmerIdType, ReadIdType, ReadIdType>> localVector;
+  typedef typename std::tuple<ReadIdType, KmerIdType, ReadIdType, ReadIdType> tuple_t;
+  std::vector<tuple_t> localVector;
 
-  //Populate localVector for each rank
+  //Populate localVector for each rank and return the vector with all the tuples
   generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector); 
+
+  //Sort tuples by KmerId
+  bool keepGoing = true;
+  int countIterations = 0;
+
+  while(keepGoing)
+  {
+    sortTuples<0,2,false> (localVector);
+    sortTuples<1,2,false> (localVector);
+
+    //keepGoing will be updated here
+    bool localKeepGoing;
+    sortTuples<3,2,true> (localVector, localKeepGoing);
+
+    MPI_Allreduce(&localKeepGoing, &keepGoing, 1, MPI_BYTE , MPI_LAND, MPI_COMM_WORLD);
+    countIterations++;
+  }
+
+  std::cout << "Algorithm took " << countIterations << " iteration.\n"; 
 
   MPI_Finalize();   
   return(0);
+
 }
+
 

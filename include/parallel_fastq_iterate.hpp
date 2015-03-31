@@ -16,24 +16,28 @@
 
 //Own includes
 
+//Includes from mxx library
+#include <mxx/datatypes.hpp>
+#include <mxx/shift.hpp>
 
 
 /**
  * @details
- * Generate a vector of kmers from FASTQ file for each MPI process
- * This vector will no doubt have duplicate entries. Uses Tony's Bliss code
+ * Generate a vector of tuples(read, kmer, Pn, Pc) from FASTQ file for each MPI process
+ * Uses Tony's Bliss code
  * Approach to build the vector
  * 1. Define file blocks and iterators for each rank
  * 2. Within each rank, iterate over all the reads
- * 3. For each read, iterate over all the kmers and push them to vector
+ * 3. For each read, iterate over all the reads and kmers in them and push them to vector
  * 4. Return the vector
  *
- * @tparam T                Type of vector to populate which should be std::vector of KmerType
+ * @tparam T                Type of vector to populate which should be std::vector of tuples
  * @param[out] localVector  Reference of vector to populate
  * @note                    This function should be called by all MPI ranks
+ *                          No barrier at the end of the function execution
  */
-template <typename KmerType, typename Alphabet, typename T>
-void generateKmerVector(const std::string &filename,
+template <typename KmerType, typename Alphabet, typename ReadIDType, typename T>
+void generateReadKmerVector(const std::string &filename,
                         T& localVector,
                         MPI_Comm comm = MPI_COMM_WORLD) 
 {
@@ -69,6 +73,8 @@ void generateKmerVector(const std::string &filename,
   typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
 
   //Loop over all the L1 partitions
+
+  ReadIDType readId = 0;
   while(partition.getRange().size() > 0)
   {
 
@@ -104,12 +110,40 @@ void generateKmerVector(const std::string &filename,
       // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
       for (; start != end; ++start)
       {
-        //Insert kmer to vector
-        localVector.push_back(*start);
+        //Make tuple
+        //getPrefix() on kmer gives a 64-bit prefix for hashing assuming 
+        auto tupleToInsert = std::make_tuple(readId, (*start).getPrefix(), readId, readId);
+
+        //Insert tuple to vector
+        localVector.push_back(tupleToInsert);
       }
+
+      readId += 1;
     }
 
     partition = loader.getNextL1Block();
+  }
+
+  //In order to make sure the readIds are unique across MPI procs, we need to communicate and update the local
+  //maximum read id
+  MPI_Barrier(comm);
+
+  ReadIDType previousReadIdSum;
+
+  //Get MPI Datatype using mxx library
+  mxx::datatype<ReadIDType> MPI_ReadIDType;
+  MPI_Exscan(&readId, &previousReadIdSum, 1, MPI_ReadIDType.type(), MPI_SUM, comm);
+
+
+  //Update all elements
+  if(rank > 0)
+  {
+    for ( auto& eachTuple : localVector) 
+    {
+      std::get<0>(eachTuple) = std::get<0>(eachTuple) + previousReadIdSum;
+      std::get<2>(eachTuple) = std::get<0>(eachTuple);
+      std::get<3>(eachTuple) = std::get<0>(eachTuple);
+    }
   }
 
   std::cerr << "[generateKmerVector] Rank : " << rank << " parsed " << localVector.size() << " kmers\n";
