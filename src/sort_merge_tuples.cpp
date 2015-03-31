@@ -1,5 +1,6 @@
 //Includes
 #include <mpi.h>
+#include <iostream> 
 
 //File includes from BLISS
 #include <common/kmer.hpp>
