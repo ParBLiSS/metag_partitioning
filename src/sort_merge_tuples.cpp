@@ -50,7 +50,8 @@ int main(int argc, char** argv)
   while(keepGoing)
   {
     //Sort by reads
-    sortTuples<0,2,false> (localVector);
+    //We don't need this becuase Pc and Pn are initialised by readIds
+    //sortTuples<0,2,false> (localVector);
 
     //Sort by Kmers
     sortTuples<1,2,false> (localVector);
