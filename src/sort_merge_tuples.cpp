@@ -56,7 +56,7 @@ int main(int argc, char** argv)
     bool localKeepGoing;
     sortTuples<3,2,true> (localVector, localKeepGoing);
 
-    MPI_Allreduce(&localKeepGoing, &keepGoing, 1, MPI_BYTE , MPI_LAND, MPI_COMM_WORLD);
+    MPI_Allreduce(&localKeepGoing, &keepGoing, 1, MPI_BYTE , MPI_LOR, MPI_COMM_WORLD);
     countIterations++;
   }
 
