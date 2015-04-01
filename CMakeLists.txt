@@ -55,8 +55,6 @@ add_subdirectory("${PROJECT_SOURCE_DIR}/ext/bliss")
 include_directories("${bliss_SOURCE_DIR}/src")
 include_directories("${bliss_BINARY_DIR}")
 
-#include_directories("${psac_SOURCE_DIR}/include")
-#include_directories("${psac_BINARY_DIR}")
 include_directories("${PROJECT_SOURCE_DIR}/ext/psac-copy/include")
 
 # add own subdirectories

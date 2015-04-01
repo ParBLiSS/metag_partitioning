@@ -147,7 +147,7 @@ void generateReadKmerVector(const std::string &filename,
     }
   }
 
-  std::cerr << "[generateKmerVector] Rank : " << rank << " parsed " << localVector.size() << " kmers\n";
+  //std::cerr << "[generateKmerVector] Rank : " << rank << " parsed " << localVector.size() << " kmers\n";
 }
 
 #endif

@@ -10,6 +10,24 @@
 #include "sortTuples.hpp"
 #include "parallel_fastq_iterate.hpp"
 
+//from external repository
+#include <timer.hpp>
+
+/*
+ * Uses timer.hpp from Patrick's psack-copy
+ * Couple of variables like p and rank should be defined as communicator size and MPI rank within the code
+ */
+
+#define MP_ENABLE_TIMER 1
+#if MP_ENABLE_TIMER
+#define MP_TIMER_START() TIMER_START()
+#define MP_TIMER_END_SECTION(str) TIMER_END_SECTION(str)
+#else
+#define MP_TIMER_START()
+#define MP_TIMER_END_SECTION(str)
+#endif
+
+
 int main(int argc, char** argv)
 {
   // Initialize the MPI library:
@@ -38,13 +56,13 @@ int main(int argc, char** argv)
   typedef uint32_t ReadIdType;
 
   //Know rank
-  int rank, commsize;
+  int rank, p;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &commsize);
+  MPI_Comm_size(MPI_COMM_WORLD, &p);
 
   if(!rank)
   {
-    std::cout << "Runnning with " << commsize<< " processors.\n"; 
+    std::cout << "Runnning with " << p << " processors.\n"; 
     std::cout << "Filename : " <<  filename << "\n"; 
   }
   
@@ -59,8 +77,12 @@ int main(int argc, char** argv)
   typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType> tuple_t;
   std::vector<tuple_t> localVector;
 
+  MP_TIMER_START();
+
   //Populate localVector for each rank and return the vector with all the tuples
   generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector); 
+
+  MP_TIMER_END_SECTION("Read data from disk");
 
   //Sort tuples by KmerId
   bool keepGoing = true;
@@ -68,6 +90,7 @@ int main(int argc, char** argv)
 
   while(keepGoing)
   {
+    MP_TIMER_START();
     //Sort by Kmers
     //Update P_n
     sortTuples<0,1,false> (localVector);
@@ -84,6 +107,8 @@ int main(int argc, char** argv)
     countIterations++;
     if(!rank)
       std::cout << "[RANK 0] : Iteration # " << countIterations <<"\n";
+
+    MP_TIMER_END_SECTION("Partitioning iteration completed");
   }
 
   //printTuples(localVector);
