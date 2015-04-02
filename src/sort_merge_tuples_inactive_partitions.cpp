@@ -35,7 +35,7 @@ int main(int argc, char** argv)
 
   //Specify the fileName
   std::string filename; 
-  if( argc == 2 ) {
+  if( argc > 1 ) {
     filename = argv[1];
   }
   else {
@@ -43,17 +43,22 @@ int main(int argc, char** argv)
     return 1;
   }
 
+
   //Specify Kmer Type
   const int kmerLength = 31;
   typedef bliss::common::DNA AlphabetType;
 
   typedef bliss::common::Kmer<kmerLength, AlphabetType, uint64_t> KmerType;
 
+
+
   //Assuming kmer-length is less than 32
   typedef uint64_t KmerIdType;
 
   //Assuming read count is less than 4 Billion
   typedef uint32_t ReadIdType;
+
+  typedef uint8_t activeFlagType;
 
   //Know rank
   int rank, p;
@@ -73,14 +78,18 @@ int main(int argc, char** argv)
    * 0 : KmerId
    * 1 : P_new
    * 2 : P_old
+   * 3 : active/inactive partition at bit 1, interior/boundary kmer at bit 0.
    */
-  typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType> tuple_t;
+  typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType, activeFlagType> tuple_t;
   std::vector<tuple_t> localVector;
+
+  typedef KmerReduceAndMarkAsInactive<0, 2, 1, 3, tuple_t> KmerReducerType;
+  typedef PartitionReduceAndMarkAsInactive<2, 1, 3, tuple_t> PartitionReducerType;
 
   MP_TIMER_START();
 
   //Populate localVector for each rank and return the vector with all the tuples
-  generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector); 
+  generateReadKmerVector<KmerType, AlphabetType, ReadIdType, activeFlagType> (filename, localVector);
 
   MP_TIMER_END_SECTION("Read data from disk");
 
@@ -88,22 +97,20 @@ int main(int argc, char** argv)
   bool keepGoing = true;
   int countIterations = 0;
 
-  while(keepGoing)
+  while (keepGoing)
   {
     MP_TIMER_START();
     //Sort by Kmers
     //Update P_n
-    sortTuples<0,1,false> (localVector);
+    sortTuples<0, KmerReducerType> (localVector.begin(), localVector.end(), comm);
 
-    //keepGoing will be updated here
-    bool localKeepGoing;
 
     //Sort by P_c
     //Update P_n and P_c both
-    sortTuples<2,1,true> (localVector, localKeepGoing);
+    sortTuples<2, PartitionReducerType> (localVector.begin(), localVector.end(), comm);
 
     //Check whether all processors are done
-    MPI_Allreduce(&localKeepGoing, &keepGoing, 1, MPI_CHAR , MPI_MAX, MPI_COMM_WORLD);
+    keepGoing = checkTermination<3>(localVector.begin(), localVector.end(), comm);
     countIterations++;
     if(!rank)
       std::cout << "[RANK 0] : Iteration # " << countIterations <<"\n";

@@ -43,10 +43,10 @@ void generateReadKmerVector(const std::string &filename,
                         MPI_Comm comm = MPI_COMM_WORLD) 
 {
   /// DEFINE file loader.  this only provides the L1 blocks, not reads.
-  using FileLoaderType = bliss::io::FASTQLoader<CharType, false, true>; // raw data type :  use CharType
+  using FileLoaderType = bliss::io::FASTQLoader<CharType, false, true>; // raw data type :  use CharType    // TODO: change to true,false
 
   // from FileLoader type, get the block iter type and range type
-  using FileBlockIterType = typename FileLoaderType::L2BlockType::iterator;
+  using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
 
   /// DEFINE the iterator parser to get fastq records.  we don't need to parse the quality.
   using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
@@ -70,6 +70,8 @@ void generateReadKmerVector(const std::string &filename,
   //==== create file Loader (single thread per MPI process)
   FileLoaderType loader(comm, filename);  // this handle is alive through the entire building process.
 
+
+
   //====  now process the file, one L1 block (block partition by MPI Rank) at a time
   typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
 
@@ -78,6 +80,7 @@ void generateReadKmerVector(const std::string &filename,
   ReadIDType readId = 0;
   while(partition.getRange().size() > 0)
   {
+    // TODO: reserve vector's size at this point.
 
     //== process the chunk of data
     SeqType read;
@@ -113,10 +116,10 @@ void generateReadKmerVector(const std::string &filename,
       {
         //Make tuple
         //getPrefix() on kmer gives a 64-bit prefix for hashing assuming 
-        auto tupleToInsert = std::make_tuple((*start).getPrefix(), readId, readId);
+        auto tupleToInsert = std::make_tuple((*start).getPrefix(), readId, readId, 0);
 
         //Insert tuple to vector
-        localVector.push_back(tupleToInsert);
+        localVector.push_back(tupleToInsert);                                         // TODO: use emplace_back
       }
 
       readId += 1;
