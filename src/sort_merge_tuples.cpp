@@ -29,6 +29,9 @@
 #define MP_TIMER_END_SECTION(str)
 #endif
 
+//To output all the kmers and their respective partitionIds
+//Switch on while testing
+#define OUTPUTTOFILE 1
 
 int main(int argc, char** argv)
 {
@@ -113,14 +116,12 @@ int main(int argc, char** argv)
     MP_TIMER_END_SECTION("Partitioning iteration completed");
   }
 
-  //printTuples(localVector);
-  std::string ofname = filename;
-  std::stringstream ss;
-  ss << "." << rank << ".out";
-  ofname.append(ss.str());
-
-  writeTuples<0, 2>(localVector, ofname);
-
+#ifdef OUTPUTTOFILE
+  //Output all (Kmer, PartitionIds) to a file in sorted order by Kmer
+  //Don't play with the 0, 2 order, this is assumed by outputCompare
+  std::cout << "WARNING: write to file option enabled \n";
+  writeTuplesAll<0, 2>(localVector, filename);
+#endif
 
   if(!rank)
     std::cout << "Algorithm took " << countIterations << " iteration.\n"; 
