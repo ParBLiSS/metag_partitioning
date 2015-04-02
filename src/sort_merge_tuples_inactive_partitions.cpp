@@ -13,6 +13,8 @@
 //from external repository
 #include <timer.hpp>
 
+#include <sstream>
+
 /*
  * Uses timer.hpp from Patrick's psack-copy
  * Couple of variables like p and rank should be defined as communicator size and MPI rank within the code
@@ -89,7 +91,7 @@ int main(int argc, char** argv)
   MP_TIMER_START();
 
   //Populate localVector for each rank and return the vector with all the tuples
-  generateReadKmerVector<KmerType, AlphabetType, ReadIdType, activeFlagType> (filename, localVector);
+  generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, MPI_COMM_WORLD);
 
   MP_TIMER_END_SECTION("Read data from disk");
 
@@ -102,15 +104,15 @@ int main(int argc, char** argv)
     MP_TIMER_START();
     //Sort by Kmers
     //Update P_n
-    sortTuples<0, KmerReducerType> (localVector.begin(), localVector.end(), comm);
+    sortAndReduceTuples<0, KmerReducerType, tuple_t> (localVector.begin(), localVector.end(), MPI_COMM_WORLD);
 
 
     //Sort by P_c
     //Update P_n and P_c both
-    sortTuples<2, PartitionReducerType> (localVector.begin(), localVector.end(), comm);
+    sortAndReduceTuples<2, PartitionReducerType, tuple_t> (localVector.begin(), localVector.end(), MPI_COMM_WORLD);
 
     //Check whether all processors are done
-    keepGoing = checkTermination<3>(localVector.begin(), localVector.end(), comm);
+    keepGoing = checkTermination<3, tuple_t>(localVector.begin(), localVector.end(), MPI_COMM_WORLD);
     countIterations++;
     if(!rank)
       std::cout << "[RANK 0] : Iteration # " << countIterations <<"\n";
@@ -124,7 +126,7 @@ int main(int argc, char** argv)
   ss << "." << rank << ".out";
   ofname.append(ss.str());
 
-  writeTuples<0, 2>(localVector, ofname);
+  writeTuples<0, 2, tuple_t>(localVector, ofname);
 
 
   if(!rank)

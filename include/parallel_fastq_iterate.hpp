@@ -32,14 +32,14 @@
  * 3. For each read, iterate over all the kmers in them and push them to vector
  * 4. Return the vector
  *
- * @tparam T                Type of vector to populate which should be std::vector of tuples
+ * @tparam T                Type of elements in a vector to populate which should be std::vector of tuples
  * @param[out] localVector  Reference of vector to populate
  * @note                    This function should be called by all MPI ranks
  *                          No barrier at the end of the function execution
  */
 template <typename KmerType, typename Alphabet, typename ReadIDType, typename T>
 void generateReadKmerVector(const std::string &filename,
-                        T& localVector,
+                        std::vector<T>& localVector,
                         MPI_Comm comm = MPI_COMM_WORLD) 
 {
   /// DEFINE file loader.  this only provides the L1 blocks, not reads.
@@ -61,7 +61,7 @@ void generateReadKmerVector(const std::string &filename,
   using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
 
   /// kmer generation iterator
-  typedef bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType> KmerIterType;
+  using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
 
   /// MPI rank within the communicator
   int rank;
@@ -116,7 +116,10 @@ void generateReadKmerVector(const std::string &filename,
       {
         //Make tuple
         //getPrefix() on kmer gives a 64-bit prefix for hashing assuming 
-        auto tupleToInsert = std::make_tuple((*start).getPrefix(), readId, readId, 0);
+        T tupleToInsert;
+        std::get<0>(tupleToInsert) = (*start).getPrefix();
+        std::get<1>(tupleToInsert) = readId;
+        std::get<1>(tupleToInsert) = readId;
 
         //Insert tuple to vector
         localVector.push_back(tupleToInsert);                                         // TODO: use emplace_back

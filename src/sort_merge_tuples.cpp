@@ -13,6 +13,8 @@
 //from external repository
 #include <timer.hpp>
 
+#include <sstream>
+
 /*
  * Uses timer.hpp from Patrick's psack-copy
  * Couple of variables like p and rank should be defined as communicator size and MPI rank within the code
@@ -85,7 +87,7 @@ int main(int argc, char** argv)
   MP_TIMER_END_SECTION("Read data from disk");
 
   //Sort tuples by KmerId
-  bool keepGoing = true;
+  char keepGoing = 1;
   int countIterations = 0;
 
   while(keepGoing)
@@ -96,7 +98,7 @@ int main(int argc, char** argv)
     sortTuples<0,1,false> (localVector);
 
     //keepGoing will be updated here
-    bool localKeepGoing;
+    char localKeepGoing;
 
     //Sort by P_c
     //Update P_n and P_c both
