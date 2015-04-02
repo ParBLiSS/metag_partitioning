@@ -150,7 +150,15 @@ void generateReadKmerVector(const std::string &filename,
     }
   }
 
-  //std::cerr << "[generateKmerVector] Rank : " << rank << " parsed " << localVector.size() << " kmers\n";
+  //For logging purpose, count total kmers across all the nodes
+  auto localVecSize = localVector.size();
+
+  //Global vector size
+  uint64_t globalVecSize;
+  MPI_Reduce(&localVecSize, &globalVecSize, 1, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, comm);
+
+  if(rank == 0)
+    std::cout << "Total count of tuples: " << globalVecSize << " \n";
 }
 
 #endif
