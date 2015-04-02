@@ -99,38 +99,39 @@ int main(int argc, char** argv)
   bool keepGoing = true;
   int countIterations = 0;
 
-  while (keepGoing)
-  {
-    MP_TIMER_START();
-    //Sort by Kmers
-    //Update P_n
-    sortAndReduceTuples<0, KmerReducerType, tuple_t> (localVector.begin(), localVector.end(), MPI_COMM_WORLD);
+
+    while (keepGoing)
+    {
+      MP_TIMER_START();
+      //Sort by Kmers
+      //Update P_n
+      sortAndReduceTuples<0, KmerReducerType, tuple_t> (localVector.begin(), localVector.end(), MPI_COMM_WORLD);
 
 
-    //Sort by P_c
-    //Update P_n and P_c both
-    sortAndReduceTuples<2, PartitionReducerType, tuple_t> (localVector.begin(), localVector.end(), MPI_COMM_WORLD);
+      //Sort by P_c
+      //Update P_n and P_c both
+      sortAndReduceTuples<2, PartitionReducerType, tuple_t> (localVector.begin(), localVector.end(), MPI_COMM_WORLD);
 
-    //Check whether all processors are done
-    keepGoing = checkTermination<3, tuple_t>(localVector.begin(), localVector.end(), MPI_COMM_WORLD);
-    countIterations++;
+      //Check whether all processors are done
+      keepGoing = !checkTermination<3, tuple_t>(localVector.begin(), localVector.end(), MPI_COMM_WORLD);
+      countIterations++;
+      if(!rank)
+        std::cout << "[RANK 0] : Iteration # " << countIterations <<"\n";
+
+      MP_TIMER_END_SECTION("Partitioning iteration completed");
+    }
+
+    //printTuples(localVector);
+    std::string ofname = filename;
+    std::stringstream ss;
+    ss << "." << rank << ".out";
+    ofname.append(ss.str());
+
+    writeTuples<0, 2, tuple_t>(localVector, ofname);
+
+
     if(!rank)
-      std::cout << "[RANK 0] : Iteration # " << countIterations <<"\n";
-
-    MP_TIMER_END_SECTION("Partitioning iteration completed");
-  }
-
-  //printTuples(localVector);
-  std::string ofname = filename;
-  std::stringstream ss;
-  ss << "." << rank << ".out";
-  ofname.append(ss.str());
-
-  writeTuples<0, 2, tuple_t>(localVector, ofname);
-
-
-  if(!rank)
-    std::cout << "Algorithm took " << countIterations << " iteration.\n"; 
+      std::cout << "Algorithm took " << countIterations << " iteration.\n";
 
   MPI_Finalize();   
   return(0);
