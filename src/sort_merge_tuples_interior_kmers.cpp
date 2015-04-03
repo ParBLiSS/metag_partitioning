@@ -56,6 +56,7 @@ int main(int argc, char** argv)
 
   typedef bliss::common::Kmer<kmerLength, AlphabetType, uint64_t> KmerType;
 
+  MPI_Comm comm = MPI_COMM_WORLD;
 
 
   //Assuming kmer-length is less than 32
@@ -68,8 +69,8 @@ int main(int argc, char** argv)
 
   //Know rank
   int rank, p;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &p);
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &p);
 
   if(!rank)
   {
@@ -95,7 +96,7 @@ int main(int argc, char** argv)
   MP_TIMER_START();
 
   //Populate localVector for each rank and return the vector with all the tuples
-  generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, MPI_COMM_WORLD);
+  generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, comm);
 
   MP_TIMER_END_SECTION("Read data from disk");
 
@@ -108,50 +109,96 @@ int main(int argc, char** argv)
   assert(localVector.size() > 0);
 
   auto start = localVector.begin();
-  auto end = localVector.end();
+  auto kend = localVector.end();
+  auto pend = localVector.end();
 
   ActivePartitionPredicate<3, tuple_t> app;
+
+  BoundaryKmerPredicate<3, tuple_t> bkp;
+
+  layer_comparator<0, tuple_t> kmer_comp;
+  layer_comparator<2, tuple_t> pc_comp;
+
+  KmerReducerType kmer_reduc;
+  PartitionReducerType part_reduc;
 
 
     while (keepGoing)
     {
 
-
-    	{
+      // take the boundary kmers and do joining via reduction
+      {
         MP_TIMER_START();
-        //Sort by Kmers
-        //Update P_n
-        sortAndReduceTuples<0, KmerReducerType, tuple_t> (start, end, MPI_COMM_WORLD);
-        MP_TIMER_END_SECTION("iteration KMER phase completed");
-    	}
-
-
-    	// put (active or inactive) kmers back and do reduction
-    	{
+      //Sort the vector by each tuple's "sortLayer"th element
+        mxx::sort(start, kend, kmer_comp, comm, false);
+        MP_TIMER_END_SECTION("    kmer mxx sort completed");
+      }
+      {
         MP_TIMER_START();
-        //Sort by P_c
-        //Update P_n and P_c both
-        sortAndReduceTuples<2, PartitionReducerType, tuple_t> (start, end, MPI_COMM_WORLD);
-        MP_TIMER_END_SECTION("iteration PARTITION phase completed");
-    	}
-    	// after this step, 1 Pc may be split up across processors.
-    	// but the partition sort in the next step will bring them back together.
-    	// since the interior kmers are moved as well, all tuples in a partition are still contiguous.
-
-    	{
+        kmer_reduc(start, kend, comm);
+        MP_TIMER_END_SECTION("    kmer reduction completed");
+      }
+      // then put them back to the original nodes
+      {
         MP_TIMER_START();
-        //Check whether all processors are done
-        keepGoing = !checkTermination<3, tuple_t>(start, end, MPI_COMM_WORLD);
+      //Sort the vector by each tuple's "sortLayer"th element
+        mxx::sort(start, kend, pc_comp, comm, false);
+        MP_TIMER_END_SECTION("    pold mxx sort completed");
+      }
+      // after this step, the updated boundary kmers are back in
+      // their original partition via sort by Pc.
+
+      // now we need to update the entire active partition including
+      // interior kmers.  via a reduction, which requires a local sort first
+      {
+        MP_TIMER_START();
+        std::sort(start, pend, pc_comp);
+        MP_TIMER_END_SECTION("    part local sort completed");
+      }
+      // then do the reduction.
+      {
+        MP_TIMER_START();
+        part_reduc(start, pend, comm);
+        MP_TIMER_END_SECTION("    part reduction completed");
+      }
+
+      // at this point, we can check for termination.
+      {
+        MP_TIMER_START();
+        //Check whether all processors are done, and also update "pend"
+        keepGoing = !checkTermination<3, tuple_t>(start, pend, comm);
         MP_TIMER_END_SECTION("iteration Check phase completed");
-    	}
+      }
 
-    	if (keepGoing) {
-        // now reduce to only working with active partitions
-        end = std::partition(start, end, app);
-        if (end == start) ++end;
-  //    	std::sort(start, end, layer_comparator<2, tuple_t>)
-    	}
+      if (keepGoing) {
+        // now the old active partitions are updated, but they could be scattered
+        // to multiple processors.  some may have become inactive.
+        // we need to keep interior and boundary kmers of an active partition
+        // contiguously stored in the global array, so that in the next iteration
+        // the boundary_kmer_sort - reduce - pc_sort sequence put the kmers back to where
+        // they started from, so that interior kmers can be updated.
 
+
+        // we can allow the inactive partitions to be split between processes
+        // but we need to make sure active partitions go on to the next iteration.
+        pend = std::partition(start, pend, app);
+        if (pend == start) ++pend;
+
+
+        // so we need to do a global sort by (new) pc now to keep all kmers in active partitions together.
+        // no reduction is needed.
+        {
+          MP_TIMER_START();
+          //Sort the vector by each tuple's "sortLayer"th element
+          mxx::sort(start, pend, pc_comp, comm, false);
+          MP_TIMER_END_SECTION("    pnew mxx sort completed");
+        }
+
+        // and reduce working set further to boundary kmers
+        kend = std::partition(start, pend, bkp);
+        if (kend == start) ++kend;
+
+      }
       countIterations++;
       if(!rank)
         std::cout << "[RANK 0] : Iteration # " << countIterations <<"\n";

@@ -626,6 +626,13 @@ struct PartitionReduceAndMarkAsInactive {
 };
 
 
+/// partition predicate for active Pc.  all inactive partitions are move to the back of iterator.
+template<uint8_t activePartitionLayer, typename T>
+struct BoundaryKmerPredicate {
+    bool operator()(const T& x) {
+      return std::get<activePartitionLayer>(x) == 0x0;
+    }
+};
 
 
 /// partition predicate for active Pc.  all inactive partitions are move to the back of iterator.
@@ -718,6 +725,35 @@ bool checkTermination(typename std::vector<T>::iterator start, typename std::vec
   return globalMinY > 0x1;
 }
 
+/// do global reduction to see if termination criteria is satisfied.
+template<uint8_t terminationFlagLayer, typename T>
+bool checkTerminationAndUpdateIterator(typename std::vector<T>::iterator start, typename std::vector<T>::iterator &end,
+                      MPI_Comm comm = MPI_COMM_WORLD) {
+
+    int rank, p;
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &p);
+
+    size_t s;
+    size_t maxS;
+
+  mxx::datatype<size_t> dt;
+  MPI_Datatype mpi_dt = dt.type();
+  {
+    MP_TIMER_START();
+
+    end = std::partition(start, end, ActivePartitionPredicate<terminationFlagLayer, T>());
+    s = std::distance(start, end);
+
+    MPI_Allreduce(&s, &maxS, 1, mpi_dt, MPI_MAX, comm);
+    MP_TIMER_END_SECTION("    termination check completed");
+  }
+//  int rank;
+//  MPI_Comm_rank(comm, &rank);
+//  printf("rank %d minY = %u, globalMinY = %u\n", rank, minY, globalMinY);
+
+  return maxS == 0;
+}
 
 
 

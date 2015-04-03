@@ -33,7 +33,7 @@
 
 //To output all the kmers and their respective partitionIds
 //Switch on while testing
-#define OUTPUTTOFILE 0
+#define OUTPUTTOFILE 1 
 
 int main(int argc, char** argv)
 {
