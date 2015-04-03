@@ -139,7 +139,11 @@ int main(int argc, char** argv)
 
     	// now reduce to only working with active partitions
     	end = std::partition(start, end, app);
-//    	std::sort(start, end, layer_comparator<2, tuple_t>)
+
+    	// TODO: samplesort imple cannot have a local size of 0.
+    	// this hack allows 1 inactive tuple to come back into the sort, which is okay.
+    	if (end == start) ++end;
+
 
 
       countIterations++;
