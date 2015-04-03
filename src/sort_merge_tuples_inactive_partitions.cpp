@@ -142,7 +142,7 @@ int main(int argc, char** argv)
 
     	// TODO: samplesort imple cannot have a local size of 0.
     	// this hack allows 1 inactive tuple to come back into the sort, which is okay.
-    	if (end == start) ++end;
+//    	if (end == start) ++end;
 
 
 
