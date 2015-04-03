@@ -31,7 +31,7 @@
 
 //To output all the kmers and their respective partitionIds
 //Switch on while testing
-#define OUTPUTTOFILE 1
+#define OUTPUTTOFILE 0
 
 
 int main(int argc, char** argv)
@@ -148,7 +148,7 @@ int main(int argc, char** argv)
     	if (keepGoing) {
         // now reduce to only working with active partitions
         end = std::partition(start, end, app);
-        if (end == start) ++end;
+//        if (end == start) ++end;
   //    	std::sort(start, end, layer_comparator<2, tuple_t>)
     	}
 

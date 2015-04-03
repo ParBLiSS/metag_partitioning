@@ -31,7 +31,7 @@
 
 //To output all the kmers and their respective partitionIds
 //Switch on while testing
-#define OUTPUTTOFILE 1
+#define OUTPUTTOFILE 0
 
 
 int main(int argc, char** argv)
@@ -182,7 +182,7 @@ int main(int argc, char** argv)
         // we can allow the inactive partitions to be split between processes
         // but we need to make sure active partitions go on to the next iteration.
         pend = std::partition(start, pend, app);
-        if (pend == start) ++pend;
+        //if (pend == start) ++pend;
 
 
         // so we need to do a global sort by (new) pc now to keep all kmers in active partitions together.
@@ -196,7 +196,7 @@ int main(int argc, char** argv)
 
         // and reduce working set further to boundary kmers
         kend = std::partition(start, pend, bkp);
-        if (kend == start) ++kend;
+        //if (kend == start) ++kend;
 
       }
       countIterations++;
