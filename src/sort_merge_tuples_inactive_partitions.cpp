@@ -152,6 +152,7 @@ int main(int argc, char** argv)
   //    	std::sort(start, end, layer_comparator<2, tuple_t>)
     	}
 
+
       countIterations++;
       if(!rank)
         std::cout << "[RANK 0] : Iteration # " << countIterations <<"\n";
