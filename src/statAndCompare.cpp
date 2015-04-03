@@ -35,13 +35,22 @@ int main(int argc, char** argv)
   //Specify the fileName
   std::string filename1; 
   std::string filename2; 
+
+  bool compareTwoFile;
+
   if( argc == 3 ) {
     filename1 = argv[1];
     filename2 = argv[2];
+    compareTwoFile = true;
+  }
+  else if( argc == 2 ) {
+    filename1 = argv[1];
+    compareTwoFile = false;
   }
   else {
-    std::cout << "Usage: <executable> <outputFile1> <outputFile2> \n";
-    std::cout << "This executable matches the partitioning output from 2 files\n"; 
+    std::cout << "Usage : \n";
+    std::cout << "<executable> <outputFile1>\n";
+    std::cout << "<executable> <outputFile1> <outputFile2> \n";
     return 1;
   }
 
@@ -54,17 +63,21 @@ int main(int argc, char** argv)
   std::multimap<partitionIdType, KmerIdType> pid_KmersMap1;
   std::multimap<partitionIdType, KmerIdType> pid_KmersMap2;
 
-  //Create multimap from both files
+  //Create multimap from output files
   createPartitionKmerMap(filename1, pid_KmersMap1);
-  createPartitionKmerMap(filename2, pid_KmersMap2);
+  if(compareTwoFile)
+    createPartitionKmerMap(filename2, pid_KmersMap2);
 
-  //Compare two maps
-  bool resultsAreSame = (pid_KmersMap1 == pid_KmersMap2);
+  //Compare two maps if asked by user
+  if(compareTwoFile)
+  {
+    bool resultsAreSame = (pid_KmersMap1 == pid_KmersMap2);
 
-  if (resultsAreSame)
-    std::cout << "SUCCESS : Contents in both file matches\n";
-  else
-    std::cout << "FAILURE : Contents in both file doesn't match\n";
+    if (resultsAreSame)
+      std::cout << "SUCCESS : Contents in both file matches\n";
+    else
+      std::cout << "FAILURE : Contents in both file doesn't match\n";
+  }
 
   return(0);
 }
