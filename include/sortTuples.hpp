@@ -587,7 +587,7 @@ void sortAndReduceTuples(typename std::vector<T>::iterator start, typename std::
   int rank;
   MPI_Comm_rank(comm, &rank);
 
-  printf("rank %d completed %u items\n", rank, c);
+  //printf("rank %d completed %u items\n", rank, c);
 
 }
 
