@@ -682,11 +682,13 @@ void sortAndReduceTuples(typename std::vector<T>::iterator start, typename std::
   //Find the minimum element on pickMinLayer in each bucket
   //Update elements in each bucket to the minima
   Reducer r;
+
   r(start, end, comm);
   //unsigned int c = r(start, end, comm);
   	  MP_TIMER_END_SECTION("    reduction completed");
   }
 //  printf("rank %d completed %u items\n", rank, c);
+
 
 }
 
@@ -715,6 +717,7 @@ bool checkTermination(typename std::vector<T>::iterator start, typename std::vec
 
   return globalMinY > 0x1;
 }
+
 
 
 
