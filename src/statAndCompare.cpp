@@ -9,7 +9,7 @@
 //Own includes
 
 template <typename valueType, typename keyType>
-void createPartitionKmerMap(std::string filename, std::multimap<keyType, valueType> pidKmersMap)
+void createPartitionKmerMap(std::string filename, std::multimap<keyType, valueType> &pidKmersMap)
 {
   std::ifstream infile(filename);
   keyType p_id;
