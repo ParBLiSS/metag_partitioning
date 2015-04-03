@@ -116,7 +116,7 @@ int main(int argc, char** argv)
     MP_TIMER_END_SECTION("Partitioning iteration completed");
   }
 
-#ifdef OUTPUTTOFILE
+#if OUTPUTTOFILE
   //Output all (Kmer, PartitionIds) to a file in sorted order by Kmer
   //Don't play with the 0, 2 order, this is assumed by outputCompare
   if(!rank)

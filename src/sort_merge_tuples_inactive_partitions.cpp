@@ -126,7 +126,7 @@ int main(int argc, char** argv)
     }
 
 
-#ifdef OUTPUTTOFILE
+#if OUTPUTTOFILE
   //Output all (Kmer, PartitionIds) to a file in sorted order by Kmer
   //Don't play with the 0, 2 order, this is assumed by outputCompare
   if(!rank)
