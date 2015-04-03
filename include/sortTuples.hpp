@@ -635,10 +635,10 @@ void printTuples(std::vector<T>& localVector, MPI_Comm comm = MPI_COMM_WORLD)
 //Writes all the local kmers, partition ids to given filename
 //Not supposed to be used with large datasets while performance tests
 template <uint8_t keyLayer, uint8_t valueLayer, typename T>
-void writeTuples(std::vector<T>& localVector, std::string filename)
+void writeTuples(std::vector<T>& localVector, std::string filename,  std::ios_base::openmode mode = std::ios_base::out)
 {
   std::ofstream ofs;
-  ofs.open(filename);
+  ofs.open(filename, mode);
 
   //ofs << "kmer, partition" << std::endl;
 
@@ -668,15 +668,23 @@ void writeTuplesAll(std::vector<T>& localVector, std::string inputFilename, MPI_
   MPI_Comm_rank(comm, &rank);
   MPI_Comm_size(comm, &p);
 
+  if (rank == 0) {
+	  std::ofstream ofs;
+	  ofs.open(ofname, std::ofstream::out | std::ofstream::trunc);
+	  ofs.close();
+  }
 
   //Write to file one rank at a time
-  for(int i = 0; i < p ; i++) 
-  {
-    //Assuming 0 is the Keylayer and 2 is the partitionId layer 
-    if(rank == i)
-      writeTuples<keyLayer, valueLayer, T>(localVector, ofname);
+  int i;
+  for(i = 0; i < rank ; i++)
+ 	  MPI_Barrier(comm);
+
+    //Assuming 0 is the Keylayer and 2 is the partitionId layer
+
+      writeTuples<keyLayer, valueLayer, T>(localVector, ofname, std::ofstream::out | std::ofstream::app);
+  for (; i < p; ++i)
     MPI_Barrier(MPI_COMM_WORLD);
-  }
+
 }
 
 
