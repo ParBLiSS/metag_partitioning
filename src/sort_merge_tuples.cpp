@@ -119,7 +119,8 @@ int main(int argc, char** argv)
 #ifdef OUTPUTTOFILE
   //Output all (Kmer, PartitionIds) to a file in sorted order by Kmer
   //Don't play with the 0, 2 order, this is assumed by outputCompare
-  std::cout << "WARNING: write to file option enabled \n";
+  if(!rank)
+    std::cout << "WARNING: write to file option enabled \n";
   writeTuplesAll<0, 2>(localVector, filename);
 #endif
 

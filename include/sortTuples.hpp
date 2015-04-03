@@ -644,7 +644,7 @@ void writeTuples(std::vector<T>& localVector, std::string filename)
 
   for(auto &eachTuple : localVector)
   {
-    ofs << std::get<keyLayer>(eachTuple) << "," << std::get<valueLayer>(eachTuple) << std::endl;
+    ofs << std::get<keyLayer>(eachTuple) << " " << std::get<valueLayer>(eachTuple) << std::endl;
   }
 
   ofs.close();
