@@ -68,7 +68,7 @@ void writeTuples(typename std::vector<T>::iterator start, typename std::vector<T
 
   for(auto it = start; it != end; ++it)
   {
-    ofs << std::get<keyLayer>(*it) << "," << std::get<valueLayer>(*it) << std::endl;
+    ofs << std::get<keyLayer>(*it) << " " << std::get<valueLayer>(*it) << std::endl;
   }
 
   ofs.close();
