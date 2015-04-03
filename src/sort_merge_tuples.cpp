@@ -2,16 +2,18 @@
 #include <mpi.h>
 #include <iostream> 
 
+//from external repository
+#include "timer.hpp"
+
+
 //File includes from BLISS
-#include <common/kmer.hpp>
-#include <common/base_types.hpp>
+#include "common/kmer.hpp"
+#include "common/base_types.hpp"
 
 //Own includes
 #include "sortTuples.hpp"
 #include "parallel_fastq_iterate.hpp"
 
-//from external repository
-#include <timer.hpp>
 
 #include <sstream>
 
@@ -89,39 +91,57 @@ int main(int argc, char** argv)
 
   MP_TIMER_END_SECTION("Read data from disk");
 
+//  printTuples<0, 2, tuple_t>(localVector.begin(), localVector.end(), MPI_COMM_WORLD);
+
+
   //Sort tuples by KmerId
   char keepGoing = 1;
   int countIterations = 0;
+  //keepGoing will be updated here
+  char localKeepGoing;
 
   while(keepGoing)
   {
+	  {
     MP_TIMER_START();
     //Sort by Kmers
     //Update P_n
     sortTuples<0,1,false> (localVector);
+    MP_TIMER_END_SECTION("iteration KMER phase completed");
+	  }
 
-    //keepGoing will be updated here
-    char localKeepGoing;
+	  localKeepGoing = true;
+	  {
+    MP_TIMER_START();
+
 
     //Sort by P_c
     //Update P_n and P_c both
     sortTuples<2,1,true> (localVector, localKeepGoing);
+    MP_TIMER_END_SECTION("iteration PARTITION phase completed");
+	  }
+
+	  {
+    MP_TIMER_START();
 
     //Check whether all processors are done
     MPI_Allreduce(&localKeepGoing, &keepGoing, 1, MPI_CHAR , MPI_MAX, MPI_COMM_WORLD);
+    MP_TIMER_END_SECTION("iteration Check phase completed");
+	  }
+
     countIterations++;
     if(!rank)
       std::cout << "[RANK 0] : Iteration # " << countIterations <<"\n";
 
-    MP_TIMER_END_SECTION("Partitioning iteration completed");
+
   }
 
 #if OUTPUTTOFILE
   //Output all (Kmer, PartitionIds) to a file in sorted order by Kmer
   //Don't play with the 0, 2 order, this is assumed by outputCompare
-  if(!rank)
-    std::cout << "WARNING: write to file option enabled \n";
-  writeTuplesAll<0, 2>(localVector, filename);
+  if(!rank) std::cout << "WARNING: write to file option enabled \n";
+  writeTuplesAll<0, 2, tuple_t>(localVector.begin(), localVector.end(), filename);
+
 #endif
 
   if(!rank)

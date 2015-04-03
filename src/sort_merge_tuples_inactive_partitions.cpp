@@ -64,7 +64,7 @@ int main(int argc, char** argv)
   //Assuming read count is less than 4 Billion
   typedef uint32_t ReadIdType;
 
-  typedef uint8_t activeFlagType;
+  typedef uint32_t activeFlagType;
 
   //Know rank
   int rank, p;
@@ -99,39 +99,64 @@ int main(int argc, char** argv)
 
   MP_TIMER_END_SECTION("Read data from disk");
 
+//  printTuples<0, 2, tuple_t>(localVector.begin(), localVector.end(), MPI_COMM_WORLD);
+
   //Sort tuples by KmerId
   bool keepGoing = true;
   int countIterations = 0;
 
+  auto start = localVector.begin();
+  auto end = localVector.end();
+
+  ActivePartitionPredicate<3, tuple_t> app;
+
 
     while (keepGoing)
     {
+    	{
       MP_TIMER_START();
       //Sort by Kmers
       //Update P_n
-      sortAndReduceTuples<0, KmerReducerType, tuple_t> (localVector.begin(), localVector.end(), MPI_COMM_WORLD);
+      sortAndReduceTuples<0, KmerReducerType, tuple_t> (start, end, MPI_COMM_WORLD);
+      MP_TIMER_END_SECTION("iteration KMER phase completed");
+    	}
 
-
+    	{
+      MP_TIMER_START();
       //Sort by P_c
       //Update P_n and P_c both
-      sortAndReduceTuples<2, PartitionReducerType, tuple_t> (localVector.begin(), localVector.end(), MPI_COMM_WORLD);
+      sortAndReduceTuples<2, PartitionReducerType, tuple_t> (start, end, MPI_COMM_WORLD);
+      MP_TIMER_END_SECTION("iteration PARTITION phase completed");
+    	}
 
+    	{
+      MP_TIMER_START();
       //Check whether all processors are done
-      keepGoing = !checkTermination<3, tuple_t>(localVector.begin(), localVector.end(), MPI_COMM_WORLD);
+      keepGoing = !checkTermination<3, tuple_t>(start, end, MPI_COMM_WORLD);
+      MP_TIMER_END_SECTION("iteration Check phase completed");
+    	}
+
+
+    	// now reduce to only working with active partitions
+    	end = std::partition(start, end, app);
+
+    	// TODO: samplesort imple cannot have a local size of 0.
+    	// this hack allows 1 inactive tuple to come back into the sort, which is okay.
+//    	if (end == start) ++end;
+
+
+
       countIterations++;
       if(!rank)
         std::cout << "[RANK 0] : Iteration # " << countIterations <<"\n";
-
-      MP_TIMER_END_SECTION("Partitioning iteration completed");
     }
 
 
 #if OUTPUTTOFILE
   //Output all (Kmer, PartitionIds) to a file in sorted order by Kmer
   //Don't play with the 0, 2 order, this is assumed by outputCompare
-  if(!rank)
-    std::cout << "WARNING: write to file option enabled \n";
-  writeTuplesAll<0, 2>(localVector, filename);
+  if(!rank) std::cout << "WARNING: write to file option enabled \n";
+  writeTuplesAll<0, 2, tuple_t>(localVector.begin(), localVector.end(), filename);
 #endif
 
 
