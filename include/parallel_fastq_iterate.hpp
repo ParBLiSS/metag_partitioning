@@ -75,12 +75,16 @@ void generateReadKmerVector(const std::string &filename,
   //====  now process the file, one L1 block (block partition by MPI Rank) at a time
   typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
 
+  size_t read_size = loader.getRecordSize(5);
+  size_t kmers_per_read = read_size / 2 - KmerType::size;
+  size_t num_kmers = (partition.getRange().size() + read_size - 1) / read_size * kmers_per_read;
+  localVector.reserve(num_kmers);
+
   //Loop over all the L1 partitions
 
   ReadIDType readId = 0;
   while(partition.getRange().size() > 0)
   {
-    // TODO: reserve vector's size at this point.
 
     //== process the chunk of data
     SeqType read;
@@ -119,7 +123,7 @@ void generateReadKmerVector(const std::string &filename,
         T tupleToInsert;
         std::get<0>(tupleToInsert) = (*start).getPrefix();
         std::get<1>(tupleToInsert) = readId;
-        std::get<1>(tupleToInsert) = readId;
+        std::get<2>(tupleToInsert) = readId;
 
         //Insert tuple to vector
         localVector.push_back(tupleToInsert);                                         // TODO: use emplace_back

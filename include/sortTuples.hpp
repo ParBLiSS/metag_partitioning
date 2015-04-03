@@ -14,9 +14,136 @@
 #include <fstream>
 #include <iostream>
 
+#include "timer.hpp"
+
 static char dummyBool;
 
+#define MP_ENABLE_TIMER 1
+#if MP_ENABLE_TIMER
+#define MP_TIMER_START() TIMER_START()
+#define MP_TIMER_END_SECTION(str) TIMER_END_SECTION(str)
+#else
+#define MP_TIMER_START()
+#define MP_TIMER_END_SECTION(str)
+#endif
 
+template<uint8_t layer, typename T >
+struct layer_comparator : public std::binary_function<T, T, bool>
+{
+    bool operator()(const T& x, const T& y) {
+      return std::get<layer>(x) < std::get<layer>(y);
+    }
+};
+
+//Prints out all the tuples on console
+//Not supposed to be used with large datasets while performance tests
+template <uint8_t keyLayer, uint8_t valueLayer, typename T>
+void printTuples(typename std::vector<T>::iterator start,
+		typename std::vector<T>::iterator end, MPI_Comm comm = MPI_COMM_WORLD)
+{
+  /// MPI rank within the communicator
+  int rank, commsize;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &commsize);
+
+  std::stringstream ss;
+  ss << "RANK " << rank << " length " << std::distance(start, end) << std::endl;
+  for(auto it = start; it != end; ++it)
+  {
+    ss << std::get<keyLayer>(*it) << "," << std::get<valueLayer>(*it) << std::endl;
+  }
+
+  printf("%s", ss.str().c_str());
+}
+
+//Writes all the local kmers, partition ids to given filename
+//Not supposed to be used with large datasets while performance tests
+template <uint8_t keyLayer, uint8_t valueLayer, typename T>
+void writeTuples(typename std::vector<T>::iterator start, typename std::vector<T>::iterator end, std::string filename,  std::ios_base::openmode mode = std::ios_base::out)
+{
+  std::ofstream ofs;
+  ofs.open(filename, mode);
+
+  //ofs << "kmer, partition" << std::endl;
+
+  for(auto it = start; it != end; ++it)
+  {
+    ofs << std::get<keyLayer>(*it) << "," << std::get<valueLayer>(*it) << std::endl;
+  }
+
+  ofs.close();
+}
+
+//Serially write all global kmers, partition to a file in increasing order of Kmers
+//Not supposed to be used with large datasets while performance test
+template <uint8_t keyLayer, uint8_t valueLayer, typename T>
+void writeTuplesAll(typename std::vector<T>::iterator start, typename std::vector<T>::iterator end, std::string inputFilename, MPI_Comm comm = MPI_COMM_WORLD)
+{
+  //Global sort by Kmers
+  mxx::sort(start, end, layer_comparator<keyLayer, T>(), comm, false);
+
+  std::string ofname = inputFilename;
+  std::stringstream ss;
+  ss << ".out";
+  ofname.append(ss.str());
+
+  //Get the comm size
+  int rank, p;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &p);
+
+  if (rank == 0) {
+	  std::ofstream ofs;
+	  ofs.open(ofname, std::ofstream::out | std::ofstream::trunc);
+	  ofs.close();
+  }
+
+  //Write to file one rank at a time
+  int i;
+  for(i = 0; i < rank ; i++)
+ 	  MPI_Barrier(comm);
+
+    //Assuming 0 is the Keylayer and 2 is the partitionId layer
+
+      writeTuples<keyLayer, valueLayer, T>(start, end, ofname, std::ofstream::out | std::ofstream::app);
+  for (; i < p; ++i)
+    MPI_Barrier(MPI_COMM_WORLD);
+
+}
+
+
+//Implements std::equal_range using sequential scan
+template<typename ForwardIterator, typename T, class Compare>
+std::pair<ForwardIterator, ForwardIterator> findRange(ForwardIterator first, ForwardIterator second, const T& val, Compare comp)
+{
+  //Default return values
+  ForwardIterator it1 = second;
+  ForwardIterator it2 = second;
+
+  ForwardIterator start = first;
+
+  for(; start != second ; start++)
+  {
+    //Check equivalence to val
+    if(!comp(*start, val) && !comp(val, *start))
+    {
+      it1 = start;
+      break;
+    }
+  }
+
+  for(; start != second ; start++)
+  {
+    //Check where the equivalency is broken
+    if(! (!comp(*start, val) && !comp(val, *start)))
+    {
+      it2 = start;
+      break;
+    }
+  }
+
+  return std::make_pair(it1, it2);
+}
 
 /**
  * @details
@@ -41,13 +168,21 @@ void sortTuples(std::vector<T>& localVector, char& wasSortLayerUpdated = dummyBo
     return std::get<sortLayer>(x) < std::get<sortLayer>(y);
   };
 
-  //Sort the vector by each tuple's "sortLayer"th element
-  mxx::sort(localVector.begin(), localVector.end(), comparator, comm, false);
-
   /// MPI rank within the communicator
-  int rank, commsize;
+  int rank, p;
   MPI_Comm_rank(comm, &rank);
-  MPI_Comm_size(comm, &commsize);
+  MPI_Comm_size(comm, &p);
+
+  {
+	  MP_TIMER_START();
+	  //Sort the vector by each tuple's "sortLayer"th element
+	  mxx::sort(localVector.begin(), localVector.end(), comparator, comm, false);
+	  MP_TIMER_END_SECTION("    mxx sort completed");
+  }
+
+
+  {
+	  MP_TIMER_START();
 
   // Save left and right bucket Ids for later boundary value handling
   auto leftMostBucketId = std::get<sortLayer>(localVector.front());
@@ -148,7 +283,7 @@ void sortTuples(std::vector<T>& localVector, char& wasSortLayerUpdated = dummyBo
   }
 
   //Deal with tuple coming from right side now
-  if(rank < commsize - 1)
+  if(rank < p - 1)
   {
     //Check if tuple received belongs to same bucket as my first element
     bool cond1 = bucketIdfromRight == rightMostBucketId;
@@ -176,49 +311,12 @@ void sortTuples(std::vector<T>& localVector, char& wasSortLayerUpdated = dummyBo
       }
     }
   }
+	  MP_TIMER_END_SECTION("    reduction completed");
 }
 
-template<uint8_t layer, typename T >
-struct layer_comparator : public std::binary_function<T, T, bool>
-{
-    bool operator()(const T& x, const T& y) {
-      return std::get<layer>(x) < std::get<layer>(y);
-    }
-};
-
-//Implements std::equal_range using sequential scan
-template<typename ForwardIterator, typename T, class Compare>
-std::pair<ForwardIterator, ForwardIterator> findRange(ForwardIterator first, ForwardIterator second, const T& val, Compare comp)
-{
-  //Default return values
-  ForwardIterator it1 = second;
-  ForwardIterator it2 = second;
-
-  ForwardIterator start = first;
-
-  for(; start != second ; start++)
-  {
-    //Check equivalence to val
-    if(!comp(*start, val) && !comp(val, *start))
-    {
-      it1 = start;
-      break;
-    }
-  }
-
-  for(; start != second ; start++)
-  {
-    //Check where the equivalency is broken
-    if(! (!comp(*start, val) && !comp(val, *start)))
-    {
-      it2 = start;
-      break;
-    }
-  }
-
-  return std::make_pair(it1, it2);
 }
 
+// TODO: performance optimization.
 
 /**
  * Reducer functor for merging partitions that shared the same kmer.
@@ -234,6 +332,10 @@ std::pair<ForwardIterator, ForwardIterator> findRange(ForwardIterator first, For
 template <uint8_t keyLayer, uint8_t reductionLayer, uint8_t resultLayer, uint8_t activeLayer, typename T>
 struct KmerReduceAndMarkAsInactive {
 
+    static layer_comparator<keyLayer, T> keycomp;
+    static layer_comparator<reductionLayer, T>  pccomp;
+    static layer_comparator<resultLayer, T> pncomp;
+
     unsigned int operator()(typename std::vector<T>::iterator start, typename std::vector<T>::iterator end,
                             MPI_Comm comm = MPI_COMM_WORLD) {
 
@@ -243,10 +345,6 @@ struct KmerReduceAndMarkAsInactive {
       MPI_Comm_rank(comm, &rank);
 
       unsigned int completed = 0;
-
-      layer_comparator<keyLayer, T> keycomp;
-      layer_comparator<reductionLayer, T>  pccomp;
-      layer_comparator<resultLayer, T> pncomp;
 
       // init storage
       std::vector<T> toSend(2);
@@ -266,12 +364,11 @@ struct KmerReduceAndMarkAsInactive {
 
       auto innerLoopBound = findRange(start, end, *start, keycomp);
 
-
       for(auto it = start; it!= end;)  // iterate over all segments.
       {
-        y = std::get<activeLayer>(*it);
+        //y = std::get<activeLayer>(*it);
         // if 1 of the tuples have been marked as internal, all tuples with the same kmer are marked as internal
-        assert(y < 0x2);  //  inactive partition, should NOT get here.
+        assert(std::get<activeLayer>(*it) < 0x2);  //  inactive partition, should NOT get here.
 
         // else a kmer at partition boundary.
 
@@ -296,7 +393,7 @@ struct KmerReduceAndMarkAsInactive {
 
           // update all kmers Pn in this range.
           for (auto it2 = innerLoopBound.first; it2 != innerLoopBound.second; ++it2) {
-            if (minPc == maxPc) ++completed;
+            //if (minPc == maxPc) ++completed;
             std::get<activeLayer>(*it2) |= y;
             std::get<resultLayer>(*it2) = minPc;
           }
@@ -351,7 +448,7 @@ struct KmerReduceAndMarkAsInactive {
       {
         std::get<resultLayer>(*it2) = minPc;
         std::get<activeLayer>(*it2) |= y;
-        if (minPc == maxPc) ++completed;
+        //if (minPc == maxPc) ++completed;
       }
 
 
@@ -370,7 +467,7 @@ struct KmerReduceAndMarkAsInactive {
 
         for(auto it2 = lastStart; it2 != end; ++it2)
         {
-          if (minPc == maxPc) ++completed;
+          //if (minPc == maxPc) ++completed;
           std::get<resultLayer>(*it2) = minPc;
           std::get<activeLayer>(*it2) |= y;
         }
@@ -393,6 +490,9 @@ struct KmerReduceAndMarkAsInactive {
 template <uint8_t keyLayer, uint8_t reductionLayer, uint8_t activeLayer, typename T>
 struct PartitionReduceAndMarkAsInactive {
 
+    layer_comparator<keyLayer, T> keycomp;
+    layer_comparator<reductionLayer, T>  pncomp;
+    layer_comparator<activeLayer, T> flagcomp;
 
     unsigned int operator()(typename std::vector<T>::iterator start, typename std::vector<T>::iterator end,
                             MPI_Comm comm = MPI_COMM_WORLD) {
@@ -403,10 +503,6 @@ struct PartitionReduceAndMarkAsInactive {
       MPI_Comm_rank(comm, &rank);
 
       unsigned int completed = 0;
-
-      layer_comparator<keyLayer, T> keycomp;
-      layer_comparator<reductionLayer, T>  pncomp;
-      layer_comparator<activeLayer, T> flagcomp;
 
       // init storage
       std::vector<T> toSend(2);
@@ -428,12 +524,9 @@ struct PartitionReduceAndMarkAsInactive {
       // do reduction on all partition segments
       for(auto it = start; it!= end;)
       {
-
-        y = std::get<activeLayer>(*it);
-
         // if 1 of the tuples have been marked as inactive, the entire partition must be marked as inactive.
         // should not get here.
-        assert(y < 0x2);
+        assert(std::get<activeLayer>(*it) < 0x2);
 
 
         // else active partition to update it.
@@ -446,16 +539,15 @@ struct PartitionReduceAndMarkAsInactive {
         minY = std::get<activeLayer>(*(std::min_element(innerLoopBound.first, innerLoopBound.second, flagcomp)));  // get min Pn
 
         //if (minY > 0x0) ++completed;
+        y =  (minY > 0x0) ? 0x2 : 0x0;
         if (innerLoopBound.first != start && innerLoopBound.second != end)  // middle
         {
           // can update directly.
           // then update all entries in bucket
           for (auto it2 = innerLoopBound.first; it2 != innerLoopBound.second; ++it2) {
             // if partition has only internal kmers, then this partition is to become inactive..
-            if (minY > 0x0) {
-              std::get<activeLayer>(*it2) |= 0x2;
-              ++completed;
-            }
+            std::get<activeLayer>(*it2) |= y;
+
             std::get<keyLayer>(*it2) = minPn;  // new partition id.
           }
         }
@@ -501,15 +593,13 @@ struct PartitionReduceAndMarkAsInactive {
       minPn = std::get<reductionLayer>(*(std::max_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
 
       //if (minY > 0x0) ++completed;
-
+      y =  (minY > 0x0) ? 0x2 : 0x0;
       // if all kmers in partition are internal, then the partition is marked inactive.
       for(auto it2 = start; it2 != firstEnd; ++it2)
       {
         // if minY shows inactive partition or internal kmers, then this partition is to become inactive..
-        if (minY > 0x0) {
-          std::get<activeLayer>(*it2) |= 0x2;
-          ++completed;
-        }
+        std::get<activeLayer>(*it2) |= y;
+
         std::get<keyLayer>(*it2) = minPn;  // new partition id.
       }
 
@@ -521,15 +611,12 @@ struct PartitionReduceAndMarkAsInactive {
         minPn = std::get<reductionLayer>(*(std::max_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
 
         //if (minY > 0x0) ++completed;
-
+        y =  (minY > 0x0) ? 0x2 : 0x0;
         // if all kmers in partition are internal, then the partition is marked inactive.
         for(auto it2 = lastStart; it2 != end; ++it2)
         {
           // if minY shows inactive partition or internal kmers, then this partition is to become inactive..
-          if (minY > 0x0) {
-            std::get<activeLayer>(*it2) |= 0x2;
-            ++completed;
-          }
+          std::get<activeLayer>(*it2) |= y;
           std::get<keyLayer>(*it2) = minPn;  // new partition id.
         }
 
@@ -541,12 +628,12 @@ struct PartitionReduceAndMarkAsInactive {
 
 
 
-/// partition predicate for active Pc.  all inactive partitions are move to the front of iterator.
+/// partition predicate for active Pc.  all inactive partitions are move to the back of iterator.
 template<uint8_t activePartitionLayer, typename T>
 struct ActivePartitionPredicate {
     bool operator()(const T& x) {
       auto v = std::get<activePartitionLayer>(x);
-      return (v & 0x2) > 0;
+      return (v & 0x2) == 0;
     }
 };
 
@@ -575,19 +662,31 @@ void sortAndReduceTuples(typename std::vector<T>::iterator start, typename std::
                          MPI_Comm comm = MPI_COMM_WORLD)
 {
 
+  int rank, p;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &p);
+//	  printf("before sort:\n");
+//	  printTuples<0, 2, T>(start, end);
+  {
+	  MP_TIMER_START();
   //Sort the vector by each tuple's "sortLayer"th element
   mxx::sort(start, end, layer_comparator<sortLayer, T>(), comm, false);
-
+  	  MP_TIMER_END_SECTION("    mxx sort completed");
+  }
+//  printf("after sort:\n");
+//  printTuples<0, 2, T>(start, end);
+//  printf("reducing.\n");
+  {
+	  MP_TIMER_START();
   // local reduction
   //Find the minimum element on pickMinLayer in each bucket
   //Update elements in each bucket to the minima
   Reducer r;
-  unsigned int c = r(start, end, comm);
-
-  int rank;
-  MPI_Comm_rank(comm, &rank);
-
-  printf("rank %d completed %u items\n", rank, c);
+  r(start, end, comm);
+  //unsigned int c = r(start, end, comm);
+  	  MP_TIMER_END_SECTION("    reduction completed");
+  }
+//  printf("rank %d completed %u items\n", rank, c);
 
 }
 
@@ -596,17 +695,20 @@ template<uint8_t terminationFlagLayer, typename T>
 bool checkTermination(typename std::vector<T>::iterator start, typename std::vector<T>::iterator end,
                       MPI_Comm comm = MPI_COMM_WORLD) {
 
+	  int rank, p;
+	  MPI_Comm_rank(comm, &rank);
+	  MPI_Comm_size(comm, &p);
+
   auto minY = std::get<terminationFlagLayer>(*(std::min_element(start, end, layer_comparator<terminationFlagLayer, T>())));
   auto globalMinY = minY;
 
-
-
   mxx::datatype<decltype(minY)> dt;
   MPI_Datatype mpi_dt = dt.type();
-
+  {
+	  MP_TIMER_START();
   MPI_Allreduce(&minY, &globalMinY, 1, mpi_dt, MPI_MIN, comm);
-
-
+  MP_TIMER_END_SECTION("    termination check completed");
+  }
 //  int rank;
 //  MPI_Comm_rank(comm, &rank);
 //  printf("rank %d minY = %u, globalMinY = %u\n", rank, minY, globalMinY);
@@ -614,78 +716,6 @@ bool checkTermination(typename std::vector<T>::iterator start, typename std::vec
   return globalMinY > 0x1;
 }
 
-
-
-//Prints out all the tuples on console
-//Not supposed to be used with large datasets while performance tests
-template <typename T>
-void printTuples(std::vector<T>& localVector, MPI_Comm comm = MPI_COMM_WORLD)
-{
-  /// MPI rank within the communicator
-  int rank, commsize;
-  MPI_Comm_rank(comm, &rank);
-  MPI_Comm_size(comm, &commsize);
-
-  for(auto &eachTuple : localVector)
-  {
-    std::cout << rank << " : " << eachTuple << std::endl;
-  }
-}
-
-//Writes all the local kmers, partition ids to given filename
-//Not supposed to be used with large datasets while performance tests
-template <uint8_t keyLayer, uint8_t valueLayer, typename T>
-void writeTuples(std::vector<T>& localVector, std::string filename,  std::ios_base::openmode mode = std::ios_base::out)
-{
-  std::ofstream ofs;
-  ofs.open(filename, mode);
-
-  //ofs << "kmer, partition" << std::endl;
-
-  for(auto &eachTuple : localVector)
-  {
-    ofs << std::get<keyLayer>(eachTuple) << "," << std::get<valueLayer>(eachTuple) << std::endl;
-  }
-
-  ofs.close();
-}
-
-//Serially write all global kmers, partition to a file in increasing order of Kmers 
-//Not supposed to be used with large datasets while performance test
-template <uint8_t keyLayer, uint8_t valueLayer, typename T>
-void writeTuplesAll(std::vector<T>& localVector, std::string inputFilename, MPI_Comm comm = MPI_COMM_WORLD)
-{
-  //Global sort by Kmers
-  mxx::sort(localVector.begin(), localVector.end(), layer_comparator<keyLayer, T>(), comm, false);
-
-  std::string ofname = inputFilename;
-  std::stringstream ss;
-  ss << ".out";
-  ofname.append(ss.str());
-
-  //Get the comm size
-  int rank, p;
-  MPI_Comm_rank(comm, &rank);
-  MPI_Comm_size(comm, &p);
-
-  if (rank == 0) {
-	  std::ofstream ofs;
-	  ofs.open(ofname, std::ofstream::out | std::ofstream::trunc);
-	  ofs.close();
-  }
-
-  //Write to file one rank at a time
-  int i;
-  for(i = 0; i < rank ; i++)
- 	  MPI_Barrier(comm);
-
-    //Assuming 0 is the Keylayer and 2 is the partitionId layer
-
-      writeTuples<keyLayer, valueLayer, T>(localVector, ofname, std::ofstream::out | std::ofstream::app);
-  for (; i < p; ++i)
-    MPI_Barrier(MPI_COMM_WORLD);
-
-}
 
 
 #endif
