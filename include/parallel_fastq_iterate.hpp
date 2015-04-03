@@ -119,7 +119,7 @@ void generateReadKmerVector(const std::string &filename,
         T tupleToInsert;
         std::get<0>(tupleToInsert) = (*start).getPrefix();
         std::get<1>(tupleToInsert) = readId;
-        std::get<1>(tupleToInsert) = readId;
+        std::get<2>(tupleToInsert) = readId;
 
         //Insert tuple to vector
         localVector.push_back(tupleToInsert);                                         // TODO: use emplace_back
