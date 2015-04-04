@@ -78,7 +78,7 @@ int main(int argc, char** argv)
   }
   
   timer t;
-  double start = t.get_ms();
+  double startTime = t.get_ms();
 
   //Initialize the KmerVector
   /*
@@ -168,7 +168,7 @@ int main(int argc, char** argv)
   writeTuplesAll<0, 2, tuple_t>(localVector.begin(), localVector.end(), filename);
 #endif
 
-  double time = t.get_ms() - start;
+  double time = t.get_ms() - startTime;
 
 
     if(!rank)
