@@ -71,6 +71,8 @@ int main(int argc, char** argv)
     std::cout << "Filename : " <<  filename << "\n"; 
   }
   
+  timer t;
+  double startTime = t.get_ms();
 
   //Initialize the KmerVector
   /*
@@ -157,10 +159,14 @@ int main(int argc, char** argv)
   writeTuplesAll<0, 2, tuple_t>(localVector.begin(), localVector.end(), filename);
 #endif
 
+  double time = t.get_ms() - startTime;
 
 
     if(!rank)
+    {
       std::cout << "Algorithm took " << countIterations << " iteration.\n";
+      std::cout << "TOTAL TIME : " << time << " ms.\n"; 
+    }
 
   MPI_Finalize();   
   return(0);
