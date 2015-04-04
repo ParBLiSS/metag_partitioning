@@ -575,9 +575,7 @@ struct PartitionReduceAndMarkAsInactive {
 
       // first group in local.
       innerLoopBound = std::equal_range(toRecv.begin(), toRecv.end(), toSend[0], keycomp);
-
       minPn = std::get<reductionLayer>(*(std::max_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
-      assert(minPn <= std::get<keyLayer>(*it));
 
       // if all kmers in partition are internal, then the partition is marked inactive.
       // can update directly.
