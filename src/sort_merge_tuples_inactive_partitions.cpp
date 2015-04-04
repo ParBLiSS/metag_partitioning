@@ -29,10 +29,6 @@
 #define MP_TIMER_END_SECTION(str)
 #endif
 
-//To output all the kmers and their respective partitionIds
-//Switch on while testing
-#define OUTPUTTOFILE 0
-
 
 int main(int argc, char** argv)
 {
@@ -64,8 +60,6 @@ int main(int argc, char** argv)
   //Assuming read count is less than 4 Billion
   typedef uint32_t ReadIdType;
 
-  typedef uint32_t activeFlagType;
-
   //Know rank
   int rank, p;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -84,13 +78,12 @@ int main(int argc, char** argv)
    * 0 : KmerId
    * 1 : P_new
    * 2 : P_old
-   * 3 : active/inactive partition at bit 1, interior/boundary kmer at bit 0.
    */
-  typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType, activeFlagType> tuple_t;
+  typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType> tuple_t;
   std::vector<tuple_t> localVector;
 
-  typedef KmerReduceAndMarkAsInactive<0, 2, 1, 3, tuple_t> KmerReducerType;
-  typedef PartitionReduceAndMarkAsInactive<2, 1, 3, tuple_t> PartitionReducerType;
+  typedef KmerReduceAndMarkAsInactive<0, 2, 1, tuple_t> KmerReducerType;
+  typedef PartitionReduceAndMarkAsInactive<2, 1, tuple_t> PartitionReducerType;
 
   MP_TIMER_START();
 
@@ -110,7 +103,7 @@ int main(int argc, char** argv)
   auto start = localVector.begin();
   auto end = localVector.end();
 
-  ActivePartitionPredicate<3, tuple_t> app;
+  ActivePartitionPredicate<1, tuple_t> app;
 
 
     while (keepGoing)
@@ -141,15 +134,13 @@ int main(int argc, char** argv)
     	{
         MP_TIMER_START();
         //Check whether all processors are done
-        keepGoing = !checkTermination<3, tuple_t>(start, end, MPI_COMM_WORLD);
+        keepGoing = !checkTermination<1, tuple_t>(start, end, MPI_COMM_WORLD);
         MP_TIMER_END_SECTION("iteration Check phase completed");
     	}
 
     	if (keepGoing) {
         // now reduce to only working with active partitions
         end = std::partition(start, end, app);
-//        if (end == start) ++end;
-  //    	std::sort(start, end, layer_comparator<2, tuple_t>)
     	}
 
 

@@ -31,7 +31,6 @@
 
 //To output all the kmers and their respective partitionIds
 //Switch on while testing
-#define OUTPUTTOFILE 0
 
 
 int main(int argc, char** argv)
@@ -65,8 +64,6 @@ int main(int argc, char** argv)
   //Assuming read count is less than 4 Billion
   typedef uint32_t ReadIdType;
 
-  typedef uint32_t activeFlagType;
-
   //Know rank
   int rank, p;
   MPI_Comm_rank(comm, &rank);
@@ -85,13 +82,12 @@ int main(int argc, char** argv)
    * 0 : KmerId
    * 1 : P_new
    * 2 : P_old
-   * 3 : active/inactive partition at bit 1, interior/boundary kmer at bit 0.
    */
-  typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType, activeFlagType> tuple_t;
+  typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType> tuple_t;
   std::vector<tuple_t> localVector;
 
-  typedef KmerReduceAndMarkAsInactive<0, 2, 1, 3, tuple_t> KmerReducerType;
-  typedef PartitionReduceAndMarkAsInactive<2, 1, 3, tuple_t> PartitionReducerType;
+  typedef KmerReduceAndMarkAsInactive<0, 2, 1, tuple_t> KmerReducerType;
+  typedef PartitionReduceAndMarkAsInactive<2, 1, tuple_t> PartitionReducerType;
 
   MP_TIMER_START();
 
@@ -112,9 +108,9 @@ int main(int argc, char** argv)
   auto kend = localVector.end();
   auto pend = localVector.end();
 
-  ActivePartitionPredicate<3, tuple_t> app;
+  ActivePartitionPredicate<1, tuple_t> app;
 
-  BoundaryKmerPredicate<3, tuple_t> bkp;
+  BoundaryKmerPredicate<1, tuple_t> bkp;
 
   layer_comparator<0, tuple_t> kmer_comp;
   layer_comparator<2, tuple_t> pc_comp;
@@ -166,7 +162,7 @@ int main(int argc, char** argv)
       {
         MP_TIMER_START();
         //Check whether all processors are done, and also update "pend"
-        keepGoing = !checkTermination<3, tuple_t>(start, pend, comm);
+        keepGoing = !checkTermination<1, tuple_t>(start, pend, comm);
         MP_TIMER_END_SECTION("iteration Check phase completed");
       }
 
@@ -182,7 +178,6 @@ int main(int argc, char** argv)
         // we can allow the inactive partitions to be split between processes
         // but we need to make sure active partitions go on to the next iteration.
         pend = std::partition(start, pend, app);
-        //if (pend == start) ++pend;
 
 
         // so we need to do a global sort by (new) pc now to keep all kmers in active partitions together.
@@ -196,7 +191,6 @@ int main(int argc, char** argv)
 
         // and reduce working set further to boundary kmers
         kend = std::partition(start, pend, bkp);
-        //if (kend == start) ++kend;
 
       }
       countIterations++;
