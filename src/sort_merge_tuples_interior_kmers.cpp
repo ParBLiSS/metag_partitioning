@@ -77,6 +77,9 @@ int main(int argc, char** argv)
     std::cout << "Runnning with " << p << " processors.\n"; 
     std::cout << "Filename : " <<  filename << "\n"; 
   }
+
+  timer t;
+  double startTime = t.get_ms();
   
 
   //Initialize the KmerVector
@@ -128,22 +131,22 @@ int main(int argc, char** argv)
 
       // take the boundary kmers and do joining via reduction
       {
-        MP_TIMER_START();
+        //MP_TIMER_START();
       //Sort the vector by each tuple's "sortLayer"th element
         mxx::sort(start, kend, kmer_comp, comm, false);
-        MP_TIMER_END_SECTION("    kmer mxx sort completed");
+        //MP_TIMER_END_SECTION("    kmer mxx sort completed");
       }
       {
-        MP_TIMER_START();
+        //MP_TIMER_START();
         kmer_reduc(start, kend, comm);
-        MP_TIMER_END_SECTION("    kmer reduction completed");
+        //MP_TIMER_END_SECTION("    kmer reduction completed");
       }
       // then put them back to the original nodes
       {
-        MP_TIMER_START();
+        //MP_TIMER_START();
       //Sort the vector by each tuple's "sortLayer"th element
         mxx::sort(start, kend, pc_comp, comm, false);
-        MP_TIMER_END_SECTION("    pold mxx sort completed");
+        //MP_TIMER_END_SECTION("    pold mxx sort completed");
       }
       // after this step, the updated boundary kmers are back in
       // their original partition via sort by Pc.
@@ -151,23 +154,23 @@ int main(int argc, char** argv)
       // now we need to update the entire active partition including
       // interior kmers.  via a reduction, which requires a local sort first
       {
-        MP_TIMER_START();
+        //MP_TIMER_START();
         std::sort(start, pend, pc_comp);
-        MP_TIMER_END_SECTION("    part local sort completed");
+        //MP_TIMER_END_SECTION("    part local sort completed");
       }
       // then do the reduction.
       {
-        MP_TIMER_START();
+        //MP_TIMER_START();
         part_reduc(start, pend, comm);
-        MP_TIMER_END_SECTION("    part reduction completed");
+        //MP_TIMER_END_SECTION("    part reduction completed");
       }
 
       // at this point, we can check for termination.
       {
-        MP_TIMER_START();
+        //MP_TIMER_START();
         //Check whether all processors are done, and also update "pend"
         keepGoing = !checkTermination<3, tuple_t>(start, pend, comm);
-        MP_TIMER_END_SECTION("iteration Check phase completed");
+        //MP_TIMER_END_SECTION("iteration Check phase completed");
       }
 
       if (keepGoing) {
@@ -188,10 +191,10 @@ int main(int argc, char** argv)
         // so we need to do a global sort by (new) pc now to keep all kmers in active partitions together.
         // no reduction is needed.
         {
-          MP_TIMER_START();
+          //MP_TIMER_START();
           //Sort the vector by each tuple's "sortLayer"th element
           mxx::sort(start, pend, pc_comp, comm, false);
-          MP_TIMER_END_SECTION("    pnew mxx sort completed");
+          //MP_TIMER_END_SECTION("    pnew mxx sort completed");
         }
 
         // and reduce working set further to boundary kmers
@@ -213,9 +216,13 @@ int main(int argc, char** argv)
 #endif
 
 
+  double time = t.get_ms() - startTime;
 
     if(!rank)
+    {
       std::cout << "Algorithm took " << countIterations << " iteration.\n";
+      std::cout << "TOTAL TIME : " << time << " ms.\n"; 
+    }
 
   MPI_Finalize();   
   return(0);
