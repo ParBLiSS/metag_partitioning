@@ -5,8 +5,8 @@
 #include <mpi.h>
 
 //Includes from mxx library
-#include <mxx/sort.hpp> 
-#include <mxx/shift.hpp> 
+#include <mxx/sort.hpp>
+#include <mxx/shift.hpp>
 
 //Own includes
 #include "prettyprint.hpp"
@@ -345,21 +345,24 @@ struct KmerReduceAndMarkAsInactive {
 
 
 
-    unsigned int operator()(typename std::vector<T>::iterator start, typename std::vector<T>::iterator end,
+    void operator()(typename std::vector<T>::iterator start, typename std::vector<T>::iterator end,
                             MPI_Comm comm = MPI_COMM_WORLD) {
-
 
       int p;
       int rank;
       MPI_Comm_size(comm, &p);
       MPI_Comm_rank(comm, &rank);
 
-      unsigned int completed = 0;
-
       // init storage
-      std::vector<T> toSend(2);
-      std::vector<T> toRecv(2 * p);
+      std::vector<T> toSend;
 
+      if (start == end) {
+          // participate in the gather, but nothing else
+          std::vector<T> toRecv = mxx::gather_vectors(toSend, comm);
+          return;
+      }
+
+      toSend.resize(2);
 
       T v = *start;
       auto minPc = std::get<reductionLayer>(v);
@@ -426,18 +429,13 @@ struct KmerReduceAndMarkAsInactive {
 
 
       // global gather of values from all the mpi processes, just the first and second.
-      // get MPI type
-      mxx::datatype<T> dt;
-      MPI_Datatype mpi_dt = dt.type();
-      MPI_Allgather(&(toSend[0]), 2, mpi_dt, &(toRecv[0]), 2, mpi_dt, comm);
-
+      std::vector<T> toRecv = mxx::gather_vectors(toSend, comm);
 
       // local reduction of global data.  only need to do the range that this mpi process is related to.
       // array should already be sorted by k since this is a sampling at process boundaries of a distributed sorted array.
 
-
       // first group in local.
-      innerLoopBound = findRange(toRecv.begin(), toRecv.end(), toSend[0], keycomp);
+      innerLoopBound = std::equal_range(toRecv.begin(), toRecv.end(), toSend[0], keycomp);
 
       minPc = std::get<resultLayer>(*(std::min_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
       maxPc = std::get<reductionLayer>(*(std::max_element(innerLoopBound.first, innerLoopBound.second, pccomp)));
@@ -451,12 +449,11 @@ struct KmerReduceAndMarkAsInactive {
         std::get<resultLayer>(*it2) = y;
       }
 
-
       // last group in localvector
       if (std::get<keyLayer>(toSend[0]) != std::get<keyLayer>(toSend[1])) {
 
         // get each bucket
-        innerLoopBound = findRange(innerLoopBound.second, toRecv.end(), toSend[1], keycomp);
+        innerLoopBound = std::equal_range(innerLoopBound.second, toRecv.end(), toSend[1], keycomp);
 
         minPc = std::get<resultLayer>(*(std::min_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
         maxPc = std::get<reductionLayer>(*(std::max_element(innerLoopBound.first, innerLoopBound.second, pccomp)));
@@ -465,13 +462,10 @@ struct KmerReduceAndMarkAsInactive {
         // else it's a boundary kmer.
         y = (minPc == maxPc) ? MAX-1 : minPc;
 
-        for(auto it2 = lastStart; it2 != end; ++it2)
-        {
+        for(auto it2 = lastStart; it2 != end; ++it2) {
           std::get<resultLayer>(*it2) = y;
         }
       }
-      return completed;
-
     }
 };
 
@@ -491,7 +485,7 @@ struct PartitionReduceAndMarkAsInactive {
     layer_comparator<keyLayer, T> keycomp;
     layer_comparator<reductionLayer, T>  pncomp;
 
-    unsigned int operator()(typename std::vector<T>::iterator start, typename std::vector<T>::iterator end,
+    void operator()(typename std::vector<T>::iterator start, typename std::vector<T>::iterator end,
                             MPI_Comm comm = MPI_COMM_WORLD) {
 
       int p;
@@ -499,11 +493,16 @@ struct PartitionReduceAndMarkAsInactive {
       MPI_Comm_size(comm, &p);
       MPI_Comm_rank(comm, &rank);
 
-      unsigned int completed = 0;
+      std::vector<T> toSend;
 
-      // init storage
-      std::vector<T> toSend(2);
-      std::vector<T> toRecv(2 * p);
+      // check if the range is empty
+      if (start == end) {
+          // participate in the gather, but nothing else
+          std::vector<T> toRecv = mxx::gather_vectors(toSend, comm);
+          return;
+      }
+
+      toSend.resize(2);
 
       T v = *start;
       auto minPn = std::get<reductionLayer>(v);  // Pn
@@ -519,7 +518,6 @@ struct PartitionReduceAndMarkAsInactive {
         // if 1 of the tuples have been marked as inactive, the entire partition must be marked as inactive.
         // should not get here.
         assert(std::get<reductionLayer>(*it) < MAX);
-
 
         // else active partition to update it.
 
@@ -537,11 +535,11 @@ struct PartitionReduceAndMarkAsInactive {
           if (minPn >= (MAX - 1)) {
             for (auto it2 = innerLoopBound.first; it2 != innerLoopBound.second; ++it2)
               // if partition has only internal kmers, then this partition is to become inactive..
-              std::get<reductionLayer>(*it2) =  MAX;  
+              std::get<reductionLayer>(*it2) = MAX;
           }
           else
           {
-            for (auto it2 = innerLoopBound.first; it2 != innerLoopBound.second; ++it2) 
+            for (auto it2 = innerLoopBound.first; it2 != innerLoopBound.second; ++it2)
               std::get<keyLayer>(*it2) = minPn;  // new partition id.
           }
         }
@@ -568,10 +566,7 @@ struct PartitionReduceAndMarkAsInactive {
 
 
       // global gather of values from all the mpi processes, just the first and second.
-      // get MPI type
-      mxx::datatype<T> dt;
-      MPI_Datatype mpi_dt = dt.type();
-      MPI_Allgather(&(toSend[0]), 2, mpi_dt, &(toRecv[0]), 2, mpi_dt, comm);
+      std::vector<T> toRecv = mxx::gather_vectors(toSend, comm);
 
 
       // local reduction of global data.  only need to do the range that this mpi process is related to.
@@ -579,46 +574,45 @@ struct PartitionReduceAndMarkAsInactive {
 
 
       // first group in local.
-      innerLoopBound = findRange(toRecv.begin(), toRecv.end(), toSend[0], keycomp);
+      innerLoopBound = std::equal_range(toRecv.begin(), toRecv.end(), toSend[0], keycomp);
 
       minPn = std::get<reductionLayer>(*(std::max_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
-        assert(minPn <= std::get<keyLayer>(*it));
-      
+      assert(minPn <= std::get<keyLayer>(*it));
+
       // if all kmers in partition are internal, then the partition is marked inactive.
-          // can update directly.
-          // then update all entries in bucket
-          if (minPn >= (MAX - 1)) {
-      for(auto it2 = start; it2 != firstEnd; ++it2)
-              // if partition has only internal kmers, then this partition is to become inactive..
-              std::get<reductionLayer>(*it2) =  MAX;  
-          }
-          else
-          {
+      // can update directly.
+      // then update all entries in bucket
+      if (minPn >= (MAX - 1)) {
         for(auto it2 = start; it2 != firstEnd; ++it2)
-            std::get<keyLayer>(*it2) = minPn;  // new partition id.
-          }
+          // if partition has only internal kmers, then this partition is to become inactive..
+          std::get<reductionLayer>(*it2) = MAX;
+      }
+      else
+      {
+        for(auto it2 = start; it2 != firstEnd; ++it2)
+          std::get<keyLayer>(*it2) = minPn;  // new partition id.
+      }
 
       // last group in localvector
       if (std::get<keyLayer>(toSend[0]) != std::get<keyLayer>(toSend[1])) {
-        innerLoopBound = findRange(innerLoopBound.second, toRecv.end(), toSend[1], keycomp);
+        innerLoopBound = std::equal_range(innerLoopBound.second, toRecv.end(), toSend[1], keycomp);
 
         minPn = std::get<reductionLayer>(*(std::max_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
         assert(minPn <= std::get<keyLayer>(*it));
 
         // if all kmers in partition are internal, then the partition is marked inactive.
         if (minPn >= (MAX - 1)) {
-        for(auto it2 = lastStart; it2 != end; ++it2)
-              // if partition has only internal kmers, then this partition is to become inactive..
-              std::get<reductionLayer>(*it2) =  MAX;  
-          }
-          else
-          {
-        for(auto it2 = lastStart; it2 != end; ++it2)
+          for(auto it2 = lastStart; it2 != end; ++it2)
+            // if partition has only internal kmers, then this partition is to become inactive..
+            std::get<reductionLayer>(*it2) =  MAX;
+        }
+        else
+        {
+          for(auto it2 = lastStart; it2 != end; ++it2)
             std::get<keyLayer>(*it2) = minPn;  // new partition id.
-          }
+        }
 
       }
-      return completed;
     }
 };
 
@@ -639,9 +633,6 @@ struct ActivePartitionPredicate {
       return  std::get<activePartitionLayer>(x) < MAX;
     }
 };
-
-
-
 
 
 /**
@@ -669,25 +660,22 @@ void sortAndReduceTuples(typename std::vector<T>::iterator start, typename std::
   MPI_Comm_rank(comm, &rank);
   MPI_Comm_size(comm, &p);
   {
-	  MP_TIMER_START();
-  //Sort the vector by each tuple's "sortLayer"th element
-  mxx::sort(start, end, layer_comparator<sortLayer, T>(), comm, false);
-  	  MP_TIMER_END_SECTION("    mxx sort completed");
+    MP_TIMER_START();
+    //Sort the vector by each tuple's "sortLayer"th element
+    mxx::sort(start, end, layer_comparator<sortLayer, T>(), comm, false);
+    MP_TIMER_END_SECTION("    mxx sort completed");
   }
   {
-	  MP_TIMER_START();
-  // local reduction
-  //Find the minimum element on pickMinLayer in each bucket
-  //Update elements in each bucket to the minima
-  Reducer r;
+    MP_TIMER_START();
+    // local reduction
+    //Find the minimum element on pickMinLayer in each bucket
+    //Update elements in each bucket to the minima
+    Reducer r;
 
-  r(start, end, comm);
-  //unsigned int c = r(start, end, comm);
-  	  MP_TIMER_END_SECTION("    reduction completed");
+    r(start, end, comm);
+    //unsigned int c = r(start, end, comm);
+    MP_TIMER_END_SECTION("    reduction completed");
   }
-//  printf("rank %d completed %u items\n", rank, c);
-
-
 }
 
 /// do global reduction to see if termination criteria is satisfied.
@@ -695,9 +683,9 @@ template<uint8_t terminationFlagLayer, typename T>
 bool checkTermination(typename std::vector<T>::iterator start, typename std::vector<T>::iterator end,
                       MPI_Comm comm = MPI_COMM_WORLD) {
 
-	  int rank, p;
-	  MPI_Comm_rank(comm, &rank);
-	  MPI_Comm_size(comm, &p);
+  int rank, p;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &p);
 
   auto minY = std::get<terminationFlagLayer>(*(std::min_element(start, end, layer_comparator<terminationFlagLayer, T>())));
   auto globalMinY = minY;
@@ -705,9 +693,9 @@ bool checkTermination(typename std::vector<T>::iterator start, typename std::vec
   mxx::datatype<decltype(minY)> dt;
   MPI_Datatype mpi_dt = dt.type();
   {
-	  MP_TIMER_START();
-  MPI_Allreduce(&minY, &globalMinY, 1, mpi_dt, MPI_MIN, comm);
-  MP_TIMER_END_SECTION("    termination check completed");
+    MP_TIMER_START();
+    MPI_Allreduce(&minY, &globalMinY, 1, mpi_dt, MPI_MIN, comm);
+    MP_TIMER_END_SECTION("    termination check completed");
   }
 
   return globalMinY == MAX;
@@ -716,14 +704,14 @@ bool checkTermination(typename std::vector<T>::iterator start, typename std::vec
 /// do global reduction to see if termination criteria is satisfied.
 template<uint8_t terminationFlagLayer, typename T>
 bool checkTerminationAndUpdateIterator(typename std::vector<T>::iterator start, typename std::vector<T>::iterator &end,
-                      MPI_Comm comm = MPI_COMM_WORLD) {
+    MPI_Comm comm = MPI_COMM_WORLD) {
 
-    int rank, p;
-    MPI_Comm_rank(comm, &rank);
-    MPI_Comm_size(comm, &p);
+  int rank, p;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &p);
 
-    size_t s;
-    size_t maxS;
+  size_t s;
+  size_t maxS;
 
   mxx::datatype<size_t> dt;
   MPI_Datatype mpi_dt = dt.type();
