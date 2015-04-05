@@ -31,6 +31,11 @@ target_link_libraries(sort_merge_tuples_interior_kmer ${EXTRA_LIBS})
 target_link_libraries(sort_merge_tuples_interior_kmer bliss-common)
 target_link_libraries(sort_merge_tuples_interior_kmer mp-timer)
 
+add_executable(sort_merge_tuples_equal_kmer sort_merge_tuples_equal_kmers.cpp)
+target_link_libraries(sort_merge_tuples_equal_kmer ${EXTRA_LIBS})
+target_link_libraries(sort_merge_tuples_equal_kmer bliss-common)
+target_link_libraries(sort_merge_tuples_equal_kmer mp-timer)
+
 
 add_executable(statAndCompare statAndCompare.cpp)
 target_link_libraries(statAndCompare ${EXTRA_LIBS})
