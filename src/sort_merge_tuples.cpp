@@ -92,8 +92,6 @@ int main(int argc, char** argv)
 
   MP_TIMER_END_SECTION("Read data from disk");
 
-//  printTuples<0, 2, tuple_t>(localVector.begin(), localVector.end(), MPI_COMM_WORLD);
-
 
   //Sort tuples by KmerId
   char keepGoing = 1;
