@@ -94,8 +94,6 @@ int main(int argc, char** argv)
 
   MP_TIMER_END_SECTION("Read data from disk");
 
-//  printTuples<0, 2, tuple_t>(localVector.begin(), localVector.end(), MPI_COMM_WORLD);
-
   //Sort tuples by KmerId
   bool keepGoing = true;
   int countIterations = 0;
@@ -113,31 +111,31 @@ int main(int argc, char** argv)
 
 
     	{
-        //MP_TIMER_START();
+        MP_TIMER_START();
         //Sort by Kmers
         //Update P_n
         sortAndReduceTuples<0, KmerReducerType, tuple_t> (start, end, MPI_COMM_WORLD);
-        //MP_TIMER_END_SECTION("iteration KMER phase completed");
+        MP_TIMER_END_SECTION("iteration KMER phase completed");
     	}
 
 
     	// put (active or inactive) kmers back and do reduction
     	{
-        //MP_TIMER_START();
+        MP_TIMER_START();
         //Sort by P_c
         //Update P_n and P_c both
         sortAndReduceTuples<2, PartitionReducerType, tuple_t> (start, end, MPI_COMM_WORLD);
-        //MP_TIMER_END_SECTION("iteration PARTITION phase completed");
+        MP_TIMER_END_SECTION("iteration PARTITION phase completed");
     	}
     	// after this step, 1 Pc may be split up across processors.
     	// but the partition sort in the next step will bring them back together.
     	// since the interior kmers are moved as well, all tuples in a partition are still contiguous.
 
     	{
-        //MP_TIMER_START();
+        MP_TIMER_START();
         //Check whether all processors are done
         keepGoing = !checkTermination<1, tuple_t>(start, end, MPI_COMM_WORLD);
-        //MP_TIMER_END_SECTION("iteration Check phase completed");
+        MP_TIMER_END_SECTION("iteration Check phase completed");
     	}
 
     	if (keepGoing) {
