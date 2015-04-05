@@ -21,6 +21,10 @@ target_link_libraries(sort_merge_tuples_inactive_partition ${EXTRA_LIBS})
 target_link_libraries(sort_merge_tuples_inactive_partition bliss-common)
 target_link_libraries(sort_merge_tuples_inactive_partition mp-timer)
 
+add_executable(sort_merge_tuples_equal_partition sort_merge_tuples_equal_partitions.cpp)
+target_link_libraries(sort_merge_tuples_equal_partition ${EXTRA_LIBS})
+target_link_libraries(sort_merge_tuples_equal_partition bliss-common)
+target_link_libraries(sort_merge_tuples_equal_partition mp-timer)
 
 add_executable(sort_merge_tuples_interior_kmer sort_merge_tuples_interior_kmers.cpp)
 target_link_libraries(sort_merge_tuples_interior_kmer ${EXTRA_LIBS})
