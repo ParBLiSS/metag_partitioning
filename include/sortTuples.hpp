@@ -571,7 +571,7 @@ struct PartitionReduceAndMarkAsInactive {
 
       // first group in local.
       innerLoopBound = std::equal_range(toRecv.begin(), toRecv.end(), toSend[0], keycomp);
-      minPn = std::get<reductionLayer>(*(std::max_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
+      minPn = std::get<reductionLayer>(*(std::min_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
 
       // if all kmers in partition are internal, then the partition is marked inactive.
       // can update directly.
@@ -590,8 +590,7 @@ struct PartitionReduceAndMarkAsInactive {
       // last group in localvector
       if (std::get<keyLayer>(toSend[0]) != std::get<keyLayer>(toSend[1])) {
         innerLoopBound = std::equal_range(innerLoopBound.second, toRecv.end(), toSend[1], keycomp);
-
-        minPn = std::get<reductionLayer>(*(std::max_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
+        minPn = std::get<reductionLayer>(*(std::min_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
 
         // if all kmers in partition are internal, then the partition is marked inactive.
         if (minPn >= (MAX - 1)) {
