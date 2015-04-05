@@ -7,6 +7,7 @@
 //Includes from mxx library
 #include <mxx/sort.hpp> 
 #include <mxx/shift.hpp> 
+#include <mxx/collective.hpp>
 
 //Own includes
 #include "prettyprint.hpp"
@@ -26,6 +27,10 @@ static char dummyBool;
 #define MP_TIMER_START()
 #define MP_TIMER_END_SECTION(str)
 #endif
+
+//To output all the kmers and their respective partitionIds
+//Switch on while testing
+#define OUTPUTTOFILE 0
 
 template<uint8_t layer, typename T >
 struct layer_comparator : public std::binary_function<T, T, bool>
@@ -174,15 +179,15 @@ void sortTuples(std::vector<T>& localVector, char& wasSortLayerUpdated = dummyBo
   MPI_Comm_size(comm, &p);
 
   {
-	  MP_TIMER_START();
+		//MP_TIMER_START();
 	  //Sort the vector by each tuple's "sortLayer"th element
 	  mxx::sort(localVector.begin(), localVector.end(), comparator, comm, false);
-	  MP_TIMER_END_SECTION("    mxx sort completed");
+		//MP_TIMER_END_SECTION("    mxx sort completed");
   }
 
 
   {
-	  MP_TIMER_START();
+		//MP_TIMER_START();
 
   // Save left and right bucket Ids for later boundary value handling
   auto leftMostBucketId = std::get<sortLayer>(localVector.front());
@@ -311,7 +316,7 @@ void sortTuples(std::vector<T>& localVector, char& wasSortLayerUpdated = dummyBo
       }
     }
   }
-	  MP_TIMER_END_SECTION("    reduction completed");
+		//MP_TIMER_END_SECTION("    reduction completed");
 }
 
 }
@@ -675,16 +680,16 @@ void sortAndReduceTuples(typename std::vector<T>::iterator start, typename std::
 //	  printf("before sort:\n");
 //	  printTuples<0, 2, T>(start, end);
   {
-	  MP_TIMER_START();
+		//MP_TIMER_START();
   //Sort the vector by each tuple's "sortLayer"th element
   mxx::sort(start, end, layer_comparator<sortLayer, T>(), comm, false);
-  	  MP_TIMER_END_SECTION("    mxx sort completed");
+      //MP_TIMER_END_SECTION("    mxx sort completed");
   }
 //  printf("after sort:\n");
 //  printTuples<0, 2, T>(start, end);
 //  printf("reducing.\n");
   {
-	  MP_TIMER_START();
+		//MP_TIMER_START();
   // local reduction
   //Find the minimum element on pickMinLayer in each bucket
   //Update elements in each bucket to the minima
@@ -692,7 +697,7 @@ void sortAndReduceTuples(typename std::vector<T>::iterator start, typename std::
 
   r(start, end, comm);
   //unsigned int c = r(start, end, comm);
-  	  MP_TIMER_END_SECTION("    reduction completed");
+      //MP_TIMER_END_SECTION("    reduction completed");
   }
 //  printf("rank %d completed %u items\n", rank, c);
 
@@ -714,9 +719,9 @@ bool checkTermination(typename std::vector<T>::iterator start, typename std::vec
   mxx::datatype<decltype(minY)> dt;
   MPI_Datatype mpi_dt = dt.type();
   {
-	  MP_TIMER_START();
+		//MP_TIMER_START();
   MPI_Allreduce(&minY, &globalMinY, 1, mpi_dt, MPI_MIN, comm);
-  MP_TIMER_END_SECTION("    termination check completed");
+  //MP_TIMER_END_SECTION("    termination check completed");
   }
 //  int rank;
 //  MPI_Comm_rank(comm, &rank);
@@ -740,13 +745,13 @@ bool checkTerminationAndUpdateIterator(typename std::vector<T>::iterator start, 
   mxx::datatype<size_t> dt;
   MPI_Datatype mpi_dt = dt.type();
   {
-    MP_TIMER_START();
+    //MP_TIMER_START();
 
     end = std::partition(start, end, ActivePartitionPredicate<terminationFlagLayer, T>());
     s = std::distance(start, end);
 
     MPI_Allreduce(&s, &maxS, 1, mpi_dt, MPI_MAX, comm);
-    MP_TIMER_END_SECTION("    termination check completed");
+    //MP_TIMER_END_SECTION("    termination check completed");
   }
 //  int rank;
 //  MPI_Comm_rank(comm, &rank);

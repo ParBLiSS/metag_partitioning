@@ -29,9 +29,6 @@
 #define MP_TIMER_END_SECTION(str)
 #endif
 
-//To output all the kmers and their respective partitionIds
-//Switch on while testing
-#define OUTPUTTOFILE 0
 
 
 int main(int argc, char** argv)
