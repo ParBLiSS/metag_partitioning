@@ -29,7 +29,7 @@ static char dummyBool;
 
 //To output all the kmers and their respective partitionIds
 //Switch on while testing
-#define OUTPUTTOFILE 0
+#define OUTPUTTOFILE 1
 
 
 template<uint8_t layer, typename T >
@@ -358,7 +358,7 @@ struct KmerReduceAndMarkAsInactive {
 
       if (start == end) {
           // participate in the gather, but nothing else
-          std::vector<T> toRecv = mxx::gather_vectors(toSend, comm);
+          std::vector<T> toRecv = mxx::allgather(toSend, comm);
           return;
       }
 
@@ -429,7 +429,7 @@ struct KmerReduceAndMarkAsInactive {
 
 
       // global gather of values from all the mpi processes, just the first and second.
-      std::vector<T> toRecv = mxx::gather_vectors(toSend, comm);
+      std::vector<T> toRecv = mxx::allgather(toSend, comm);
 
       // local reduction of global data.  only need to do the range that this mpi process is related to.
       // array should already be sorted by k since this is a sampling at process boundaries of a distributed sorted array.
@@ -498,7 +498,7 @@ struct PartitionReduceAndMarkAsInactive {
       // check if the range is empty
       if (start == end) {
           // participate in the gather, but nothing else
-          std::vector<T> toRecv = mxx::gather_vectors(toSend, comm);
+          std::vector<T> toRecv = mxx::allgather(toSend, comm);
           return;
       }
 
@@ -523,10 +523,11 @@ struct PartitionReduceAndMarkAsInactive {
 
         // get the range with the first element's key value.
         innerLoopBound = findRange(it, end, *it, keycomp); // get segment for Pc
+        assert(innerLoopBound.first == it);
 
         // Scan this bucket and find the minimum
         minPn = std::get<reductionLayer>(*(std::min_element(innerLoopBound.first, innerLoopBound.second, pncomp)));  // get min Pn
-        assert(minPn <= std::get<keyLayer>(*it));
+        assert(minPn == MAX-1 || minPn <= std::get<keyLayer>(*it));
 
         if (innerLoopBound.first != start && innerLoopBound.second != end)  // middle
         {
@@ -565,13 +566,8 @@ struct PartitionReduceAndMarkAsInactive {
       }
 
 
-      // global gather of values from all the mpi processes, just the first and second.
-      std::vector<T> toRecv = mxx::gather_vectors(toSend, comm);
-
-
-      // local reduction of global data.  only need to do the range that this mpi process is related to.
-      // array should already be sorted by k since this is a sampling at process boundaries of a distributed sorted array.
-
+      // global gather of the boundary elements
+      std::vector<T> toRecv = mxx::allgather(toSend, comm);
 
       // first group in local.
       innerLoopBound = std::equal_range(toRecv.begin(), toRecv.end(), toSend[0], keycomp);
@@ -596,7 +592,6 @@ struct PartitionReduceAndMarkAsInactive {
         innerLoopBound = std::equal_range(innerLoopBound.second, toRecv.end(), toSend[1], keycomp);
 
         minPn = std::get<reductionLayer>(*(std::max_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
-        assert(minPn <= std::get<keyLayer>(*it));
 
         // if all kmers in partition are internal, then the partition is marked inactive.
         if (minPn >= (MAX - 1)) {
