@@ -106,7 +106,7 @@ void writeTuplesAll(typename std::vector<T>::iterator start, typename std::vecto
   //Write to file one rank at a time
   int i;
   for(i = 0; i < rank ; i++)
- 	  MPI_Barrier(comm);
+   MPI_Barrier(comm);
 
     //Assuming 0 is the Keylayer and 2 is the partitionId layer
 

@@ -75,10 +75,10 @@ void generateReadKmerVector(const std::string &filename,
   //====  now process the file, one L1 block (block partition by MPI Rank) at a time
   typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
 
-//  size_t read_size = loader.getRecordSize(5);
-//  size_t kmers_per_read = read_size / 2 - KmerType::size;
-//  size_t num_kmers = (partition.getRange().size() + read_size - 1) / read_size * kmers_per_read;
-//  localVector.reserve(num_kmers);
+  size_t read_size = loader.getRecordSize(5);
+  size_t kmers_per_read = read_size / 2 - KmerType::size;
+  size_t num_kmers = (partition.getRange().size() + read_size - 1) / read_size * kmers_per_read;
+  localVector.reserve(num_kmers * 1.1);
 
   //Loop over all the L1 partitions
 

@@ -91,7 +91,7 @@ int main(int argc, char** argv)
 
 
   // re-distirbute vector into equal block partition
-  localVector = mxx::block_decompose(localVector);
+  mxx::block_decompose(localVector);
 
   assert(localVector.size() > 0);
   auto start = localVector.begin();

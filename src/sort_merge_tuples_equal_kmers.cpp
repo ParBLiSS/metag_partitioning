@@ -11,6 +11,7 @@
 
 // include mxx sort
 #include <mxx/sort.hpp>
+#include <mxx/distribution.hpp>
 // from external repository
 #include <timer.hpp>
 
@@ -61,8 +62,6 @@ int main(int argc, char** argv)
     typedef KmerReduceAndMarkAsInactive<0, 2, 1, tuple_t> KmerReducerType;
     typedef PartitionReduceAndMarkAsInactive<2, 1, tuple_t> PartitionReducerType;
 
-
-
     // get rank
     MPI_Comm comm = MPI_COMM_WORLD;
     int rank, p;
@@ -74,9 +73,9 @@ int main(int argc, char** argv)
         std::cout << "Filename : " <<  filename << "\n"; 
     }
 
+    // start timer
     timer t;
     double startTime = t.get_ms();
-
 
     // read input file
     MP_TIMER_START();
@@ -85,6 +84,8 @@ int main(int argc, char** argv)
     generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, comm);
     MP_TIMER_END_SECTION("Read data from disk");
 
+    // block partition vector
+    mxx::block_decompose(localVector, comm);
 
     //Sort tuples by KmerId
     bool keepGoing = true;
@@ -95,6 +96,7 @@ int main(int argc, char** argv)
     auto start = localVector.begin();
     auto kend = localVector.end();
     auto pend = localVector.end();
+    auto end = localVector.end();
 
     // initialize operators
     ActivePartitionPredicate<1, tuple_t> app;
@@ -147,9 +149,13 @@ int main(int argc, char** argv)
             pend = std::partition(start, pend, app);
             MP_TIMER_END_SECTION("std::partition partitions (all kmers)");
 
+            // re-shuffle the partitions to counter-act the load-inbalance
+            pend = mxx::block_decompose_partitions(start, pend, end);
+            MP_TIMER_END_SECTION("iteration mxx::block_decompose_partitions completed");
+
             // so we need to do a global sort by (new) pc now to keep all kmers in
             // active partitions together.  no reduction is needed.
-            mxx::sort(start, pend, pc_comp, comm, false);
+            mxx::sort(start, pend, pc_comp, comm, true);
             MP_TIMER_END_SECTION("mxx::sort by Pc (all kmers)");
 
             // separate inactive k-mers to the end of the sequence
