@@ -358,7 +358,7 @@ struct KmerReduceAndMarkAsInactive {
 
       if (start == end) {
           // participate in the gather, but nothing else
-          std::vector<T> toRecv = mxx::allgather(toSend, comm);
+          std::vector<T> toRecv = mxx::allgatherv(toSend, comm);
           return;
       }
 
@@ -429,7 +429,7 @@ struct KmerReduceAndMarkAsInactive {
 
 
       // global gather of values from all the mpi processes, just the first and second.
-      std::vector<T> toRecv = mxx::allgather(toSend, comm);
+      std::vector<T> toRecv = mxx::allgatherv(toSend, comm);
 
       // local reduction of global data.  only need to do the range that this mpi process is related to.
       // array should already be sorted by k since this is a sampling at process boundaries of a distributed sorted array.
@@ -498,7 +498,7 @@ struct PartitionReduceAndMarkAsInactive {
       // check if the range is empty
       if (start == end) {
           // participate in the gather, but nothing else
-          std::vector<T> toRecv = mxx::allgather(toSend, comm);
+          std::vector<T> toRecv = mxx::allgatherv(toSend, comm);
           return;
       }
 
@@ -567,7 +567,7 @@ struct PartitionReduceAndMarkAsInactive {
 
 
       // global gather of the boundary elements
-      std::vector<T> toRecv = mxx::allgather(toSend, comm);
+      std::vector<T> toRecv = mxx::allgatherv(toSend, comm);
 
       // first group in local.
       innerLoopBound = std::equal_range(toRecv.begin(), toRecv.end(), toSend[0], keycomp);
