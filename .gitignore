@@ -11,4 +11,4 @@ Session.vim
 *~
 
 build/
-data/*.fastq.*
+data/*.fastq.out
