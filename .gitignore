@@ -12,3 +12,4 @@ Session.vim
 
 build/
 data/*.fastq.*
+release/
