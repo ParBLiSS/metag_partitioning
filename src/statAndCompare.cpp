@@ -74,7 +74,7 @@ int main(int argc, char** argv)
     bool resultsAreSame = (pid_KmersMap1 == pid_KmersMap2);
 
     if (resultsAreSame)
-      std::cout << "SUCCESS : Contents in both file matches\n";
+      std::cout << "SUCCESS : Contents in both file match\n";
     else
       std::cout << "FAILURE : Contents in both file doesn't match\n";
   }
