@@ -101,32 +101,22 @@ int main(int argc, char** argv)
 
   while(keepGoing)
   {
-	  {
-    MP_TIMER_START();
     //Sort by Kmers
     //Update P_n
     sortTuples<0,1,false> (localVector);
     MP_TIMER_END_SECTION("iteration KMER phase completed");
-	  }
 
-	  localKeepGoing = true;
-	  {
-    MP_TIMER_START();
-
+    localKeepGoing = true;
 
     //Sort by P_c
     //Update P_n and P_c both
     sortTuples<2,1,true> (localVector, localKeepGoing);
     MP_TIMER_END_SECTION("iteration PARTITION phase completed");
-	  }
 
-	  {
-    MP_TIMER_START();
 
     //Check whether all processors are done
     MPI_Allreduce(&localKeepGoing, &keepGoing, 1, MPI_CHAR , MPI_MAX, MPI_COMM_WORLD);
     MP_TIMER_END_SECTION("iteration Check phase completed");
-	  }
 
     countIterations++;
     if(!rank)

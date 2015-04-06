@@ -108,40 +108,31 @@ int main(int argc, char** argv)
 
     while (keepGoing)
     {
+      //Sort by Kmers
+      //Update P_n
+      sortAndReduceTuples<0, KmerReducerType, tuple_t> (start, end, MPI_COMM_WORLD);
+      MP_TIMER_END_SECTION("iteration KMER phase completed");
 
 
-    	{
-        MP_TIMER_START();
-        //Sort by Kmers
-        //Update P_n
-        sortAndReduceTuples<0, KmerReducerType, tuple_t> (start, end, MPI_COMM_WORLD);
-        MP_TIMER_END_SECTION("iteration KMER phase completed");
-    	}
+      // put (active or inactive) kmers back and do reduction
+      //Sort by P_c
+      //Update P_n and P_c both
+      sortAndReduceTuples<2, PartitionReducerType, tuple_t> (start, end, MPI_COMM_WORLD);
+      MP_TIMER_END_SECTION("iteration PARTITION phase completed");
 
+      // after this step, 1 Pc may be split up across processors.
+      // but the partition sort in the next step will bring them back together.
+      // since the interior kmers are moved as well, all tuples in a partition are still contiguous.
 
-    	// put (active or inactive) kmers back and do reduction
-    	{
-        MP_TIMER_START();
-        //Sort by P_c
-        //Update P_n and P_c both
-        sortAndReduceTuples<2, PartitionReducerType, tuple_t> (start, end, MPI_COMM_WORLD);
-        MP_TIMER_END_SECTION("iteration PARTITION phase completed");
-    	}
-    	// after this step, 1 Pc may be split up across processors.
-    	// but the partition sort in the next step will bring them back together.
-    	// since the interior kmers are moved as well, all tuples in a partition are still contiguous.
+      //Check whether all processors are done
+      keepGoing = !checkTermination<1, tuple_t>(start, end, MPI_COMM_WORLD);
+      MP_TIMER_END_SECTION("iteration Check phase completed");
 
-    	{
-        MP_TIMER_START();
-        //Check whether all processors are done
-        keepGoing = !checkTermination<1, tuple_t>(start, end, MPI_COMM_WORLD);
-        MP_TIMER_END_SECTION("iteration Check phase completed");
-    	}
-
-    	if (keepGoing) {
+      if (keepGoing) {
         // now reduce to only working with active partitions
         end = std::partition(start, end, app);
-    	}
+        MP_TIMER_END_SECTION("std::partition partitions (all kmers)");
+      }
 
 
       countIterations++;
