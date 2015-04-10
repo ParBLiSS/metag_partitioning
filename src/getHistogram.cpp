@@ -9,11 +9,12 @@
 //Own includes
 #include "sortTuples.hpp"
 #include "parallel_fastq_iterate.hpp"
+#include "utils.hpp"
 
 #include <mxx/collective.hpp>
 #include <mxx/distribution.hpp>
 
-//from external repository
+// from external repository
 #include <timer.hpp>
 
 #include <sstream>
@@ -72,13 +73,9 @@ int main(int argc, char** argv)
    * 2 : P_old
    */
 
-  MP_TIMER_START();
-
   // Populate localVector for each rank and return the vector with all the tuples
   std::vector<tuple_t> localVector;
   generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, MPI_COMM_WORLD);
-
-  MP_TIMER_END_SECTION("Read data from disk");
 
 
   // re-distirbute vector into equal block partition
@@ -94,33 +91,27 @@ int main(int argc, char** argv)
   bool keepGoing = true;
   int countIterations = 0;
   while (keepGoing) {
-    MP_TIMER_START();
 
     // sort by k-mers and update Pn
     mxx::sort(start, pend, layer_comparator<0, tuple_t>(), MPI_COMM_WORLD, true);
     KmerReducerType r1;
     r1(start, pend, MPI_COMM_WORLD);
     //sortAndReduceTuples<0, KmerReducerType, tuple_t> (start, pend, MPI_COMM_WORLD);
-    MP_TIMER_END_SECTION("iteration KMER phase completed");
 
     // sort by P_c and update P_c via P_n
     mxx::sort(start, pend, layer_comparator<2, tuple_t>(), MPI_COMM_WORLD, true);
     PartitionReducerType r2;
     r2(start, pend, MPI_COMM_WORLD);
     //sortAndReduceTuples<2, PartitionReducerType, tuple_t> (start, pend, MPI_COMM_WORLD);
-    MP_TIMER_END_SECTION("iteration PARTITION phase completed");
 
     // check for global termination
     keepGoing = !checkTermination<1, tuple_t>(start, pend, MPI_COMM_WORLD);
-    MP_TIMER_END_SECTION("iteration Check phase completed");
 
     if (keepGoing) {
       // now reduce to only working with active partitions
       pend = std::partition(start, pend, app);
-      MP_TIMER_END_SECTION("iteration std::partition completed");
       // re-shuffle the partitions to counter-act the load-inbalance
       pend = mxx::block_decompose_partitions(start, pend, end);
-      MP_TIMER_END_SECTION("iteration mxx::block_decompose_partitions completed");
     }
 
     countIterations++;
@@ -138,13 +129,17 @@ int main(int argc, char** argv)
 
   double time = t.get_ms() - startTime;
 
+  std::string histFileName = filename;
+  histFileName += ".hist";
 
-    if(!rank)
-    {
-      std::cout << "Algorithm took " << countIterations << " iteration.\n";
-      std::cout << "TOTAL TIME : " << time << " ms.\n"; 
-    }
+  if(!rank)
+  {
+    std::cout << "Algorithm took " << countIterations << " iteration.\n";
+    std::cout << "TOTAL TIME : " << time << " ms.\n"; 
+    std::cout << "Generating histogram in file " << histFileName << "\n";
+  }
 
+  generatePartitionSizeHistogram<2>(localVector, histFileName);
   MPI_Finalize();
   return(0);
 }

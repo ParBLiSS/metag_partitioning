@@ -110,7 +110,7 @@ void writeTuplesAll(typename std::vector<T>::iterator start, typename std::vecto
 
     //Assuming 0 is the Keylayer and 2 is the partitionId layer
 
-      writeTuples<keyLayer, valueLayer, T>(start, end, ofname, std::ofstream::out | std::ofstream::app);
+  writeTuples<keyLayer, valueLayer, T>(start, end, ofname, std::ofstream::out | std::ofstream::app);
   for (; i < p; ++i)
     MPI_Barrier(MPI_COMM_WORLD);
 
