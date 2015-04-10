@@ -22,15 +22,6 @@
  * Couple of variables like p and rank should be defined as communicator size and MPI rank within the code
  */
 
-#define MP_ENABLE_TIMER 1
-#if MP_ENABLE_TIMER
-#define MP_TIMER_START() TIMER_START()
-#define MP_TIMER_END_SECTION(str) TIMER_END_SECTION(str)
-#else
-#define MP_TIMER_START()
-#define MP_TIMER_END_SECTION(str)
-#endif
-
 //To output all the kmers and their respective partitionIds
 //Switch on while testing
 

@@ -18,15 +18,6 @@
 #include "sortTuples.hpp"
 #include "parallel_fastq_iterate.hpp"
 
-// section timer macros
-#define MP_ENABLE_TIMER 1
-#if MP_ENABLE_TIMER
-#define MP_TIMER_START() TIMER_START()
-#define MP_TIMER_END_SECTION(str) TIMER_END_SECTION(str)
-#else
-#define MP_TIMER_START()
-#define MP_TIMER_END_SECTION(str)
-#endif
 
 
 int main(int argc, char** argv)
