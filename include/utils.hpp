@@ -16,13 +16,15 @@
 
 
 //Helper function for generating histogram
-//Inserts the given value to the vector
-template <typename T1, typename T2>
-void insertToHistogram(std::vector<T1>& hist, T2 value)
+//Inserts the given value to the map
+template <typename T, typename T2>
+void insertToHistogram(T& hist, T2 value)
 {
-  if(hist.size() < value + 1)
-    hist.resize(value + 1);
-  hist[value]++;
+  //Check if it doesn't exist in the map
+  if(hist.end() == hist.find(value))
+    hist[value] = 1;
+  else
+    hist[value]++;
 }
 
 /**
@@ -124,9 +126,9 @@ void generatePartitionSizeHistogram(typename std::vector<T> localVector, std::st
   else
     iownRightBucket = false;
 
-  //Start building the local histogram
-  std::vector<uint64_t> localHistoGram;
-  std::vector<uint64_t> histoGram;
+  //Map from partition size to count 
+  typedef std::map <uint64_t, uint32_t> MapType;
+  MapType localHistMap;
 
   for(auto it = localVector.begin(); it!= localVector.end();)  // iterate over all segments.
   {
@@ -136,47 +138,63 @@ void generatePartitionSizeHistogram(typename std::vector<T> localVector, std::st
     if (innerLoopBound.first == localVector.begin()) // first
     {
       if(iownLeftBucket)
-        insertToHistogram(localHistoGram, leftBucketSize);
+        insertToHistogram(localHistMap, leftBucketSize);
     }
     //Right most bucket
     else if (innerLoopBound.second == localVector.end()) // first
     {
       if(iownRightBucket)
-        insertToHistogram(localHistoGram, rightBucketSize);
+        insertToHistogram(localHistMap, rightBucketSize);
     }
     //Inner buckets
     else
     {
-      insertToHistogram(localHistoGram, innerLoopBound.second - innerLoopBound.first);
+      insertToHistogram(localHistMap, innerLoopBound.second - innerLoopBound.first);
     }
 
     it = innerLoopBound.second;
   }
 
-  //Prepare for the final MPI_Reduce 
-  uint32_t localSize= localHistoGram.size();
-  uint32_t maxSize;
+  //Convert map to vector
+  using tupleTypeforHist = std::tuple<uint64_t, uint32_t>;
+  std::vector<tupleTypeforHist> localHistVector;
 
-  //Find maximum size of local histogram
-  MPI_Allreduce(&localSize, &maxSize, 1, MPI_UNSIGNED, MPI_MAX, comm); 
-  localHistoGram.resize(maxSize);
-  histoGram.resize(maxSize);
+  for(MapType::iterator it = localHistMap.begin(); it != localHistMap.end(); ++it ) 
+  {
+    localHistVector.push_back(std::make_tuple(it->first, it->second));
+  }
 
-  //Do the reduction
-  MPI_Reduce(&localHistoGram[0], &histoGram[0], maxSize, MPI_UNSIGNED_LONG_LONG, MPI_SUM, 0, comm); 
+  //Gather vector from all processors to root
+  auto globalHistVector = mxx::gather_vectors(localHistVector, comm);
+  static layer_comparator<0, tupleTypeforHist> partition_size_cmp;
 
   //Write to file
   if(rank == 0)
   {
+    //Sort the vector to bring counts with same size adjacent (default comparator will work)
+    std::sort(globalHistVector.begin(), globalHistVector.end());
+
     std::ofstream ofs;
     ofs.open(filename, std::ios_base::out);
 
-    for(auto &e : histoGram)
+    //Iterate over the global vector
+    for(auto it = globalHistVector.begin(); it != globalHistVector.end();)
     {
-      ofs << e <<  "\n";
+      //Range of counts belonging to same partition size
+      auto innerLoopRange = findRange(it, globalHistVector.end(), *it, partition_size_cmp);
+      auto p_size = std::get<0>(*it);
+      uint32_t sum = 0;
+
+      //Loop over the range
+      for(auto it2 = innerLoopRange.first; it2 != innerLoopRange.second; it2++)
+        sum += std::get<1>(*it2);
+
+      ofs << p_size << " " << sum <<"\n";
+      it = innerLoopRange.second;
     }
 
     ofs.close();
+
   }
 }
 
