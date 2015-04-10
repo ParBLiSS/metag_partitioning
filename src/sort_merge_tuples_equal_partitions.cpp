@@ -50,12 +50,12 @@ int main(int argc, char** argv)
   typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType> tuple_t;
   typedef KmerReduceAndMarkAsInactive<0, 2, 1, tuple_t> KmerReducerType;
   typedef PartitionReduceAndMarkAsInactive<2, 1, tuple_t> PartitionReducerType;
-  ActivePartitionPredicate<1, tuple_t> app;
 
   // get communicaiton parameters
+  MPI_Comm comm = MPI_COMM_WORLD;
   int rank, p;
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-  MPI_Comm_size(MPI_COMM_WORLD, &p);
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &p);
 
   if(!rank) {
     std::cout << "Runnning with " << p << " processors.\n"; 
@@ -93,22 +93,36 @@ int main(int argc, char** argv)
   //Sort tuples by KmerId
   bool keepGoing = true;
   int countIterations = 0;
+
+
+  ActivePartitionPredicate<1, tuple_t> app;
+  layer_comparator<0, tuple_t> kmer_comp;
+  layer_comparator<2, tuple_t> pc_comp;
+  KmerReducerType kmer_reduc;
+  PartitionReducerType part_reduc;
+
   while (keepGoing) {
-    MP_TIMER_START();
+//    MP_TIMER_START();
 
-    // sort by k-mers and update Pn
-    mxx::sort(start, pend, layer_comparator<0, tuple_t>(), MPI_COMM_WORLD, true);
-    KmerReducerType r1;
-    r1(start, pend, MPI_COMM_WORLD);
-    //sortAndReduceTuples<0, KmerReducerType, tuple_t> (start, pend, MPI_COMM_WORLD);
-    MP_TIMER_END_SECTION("iteration KMER phase completed");
 
-    // sort by P_c and update P_c via P_n
-    mxx::sort(start, pend, layer_comparator<2, tuple_t>(), MPI_COMM_WORLD, true);
-    PartitionReducerType r2;
-    r2(start, pend, MPI_COMM_WORLD);
-    //sortAndReduceTuples<2, PartitionReducerType, tuple_t> (start, pend, MPI_COMM_WORLD);
-    MP_TIMER_END_SECTION("iteration PARTITION phase completed");
+    // sort by k-mer (only active k-mers)
+    mxx::sort(start, pend, kmer_comp, comm, true);
+    MP_TIMER_END_SECTION("mxx::sort by k-mer (active kmers)");
+
+    // reduce through k-mer neighborhood
+    //Update P_n
+    kmer_reduc(start, pend, comm);
+    MP_TIMER_END_SECTION("k-mer reduction (active kmers)");
+
+    // sort by Pc (previous partition)
+    mxx::sort(start, pend, pc_comp, comm, true);
+    MP_TIMER_END_SECTION("mxx::sort by Pc (active kmers)");
+
+    // update partition (Pn -> Pc)
+    //Update P_n and P_c both
+    part_reduc(start, pend, comm);
+    MP_TIMER_END_SECTION("partition reduction Pn->Pc (all kmers)");
+
 
     // check for global termination
     keepGoing = !checkTermination<1, tuple_t>(start, pend, MPI_COMM_WORLD);
