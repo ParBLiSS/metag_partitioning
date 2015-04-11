@@ -10,6 +10,7 @@
 #include "sortTuples.hpp"
 #include "parallel_fastq_iterate.hpp"
 #include "utils.hpp"
+#include "preProcess.hpp"
 
 #include <mxx/collective.hpp>
 #include <mxx/distribution.hpp>
@@ -77,6 +78,10 @@ int main(int argc, char** argv)
   std::vector<tuple_t> localVector;
   generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, MPI_COMM_WORLD);
 
+  //Pre-process
+  MP_TIMER_START();
+  trimReadswithHighMedianOrMaxCoverage<0,1,2>(localVector);
+  MP_TIMER_END_SECTION("Digital normalization completed");
 
   // re-distirbute vector into equal block partition
   mxx::block_decompose(localVector);

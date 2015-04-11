@@ -48,3 +48,8 @@ add_executable(getHistogram getHistogram.cpp)
 target_link_libraries(getHistogram bliss-common)
 target_link_libraries(getHistogram ${EXTRA_LIBS})
 target_link_libraries(getHistogram mp-timer)
+
+add_executable(filter_high_abundance_test filter_high_abundance_test.cpp)
+target_link_libraries(filter_high_abundance_test bliss-common)
+target_link_libraries(filter_high_abundance_test ${EXTRA_LIBS})
+target_link_libraries(filter_high_abundance_test mp-timer)
