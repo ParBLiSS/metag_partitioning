@@ -35,7 +35,7 @@ void insertToHistogram(T& hist, T2 value)
  * @NOTE              Returns histogram on root only
  */
 template <uint8_t keyLayer , typename T>
-void generatePartitionSizeHistogram(typename std::vector<T> localVector, std::string filename, MPI_Comm comm = MPI_COMM_WORLD)
+void generatePartitionSizeHistogram(typename std::vector<T>& localVector, std::string filename, MPI_Comm comm = MPI_COMM_WORLD)
 {
   /*
    * Approach :
