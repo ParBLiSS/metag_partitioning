@@ -253,8 +253,6 @@ void cluster_reads_par(const std::string& filename)
 
   // define k-mer and operator types
   typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType> tuple_t;
-  typedef PartitionReduceAndMarkAsInactive<Pc, Pn, tuple_t> PartitionReducerType;
-  ActivePartitionPredicate<Pn, tuple_t> app;
 
   // get communicaiton parameters
   int rank, p;
@@ -276,7 +274,6 @@ void cluster_reads_par(const std::string& filename)
    * 2 : P_old
    */
 
-  //MP_TIMER_START();
   MP_TIMER_START();
 
   // Populate localVector for each rank and return the vector with all the tuples
@@ -284,10 +281,6 @@ void cluster_reads_par(const std::string& filename)
   generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, MPI_COMM_WORLD);
 
   MP_TIMER_END_SECTION("Read data from disk");
-
-
-  // re-distirbute vector into equal block partition
-  //mxx::block_decompose(localVector);
 
   assert(localVector.size() > 0);
   auto start = localVector.begin();
@@ -300,25 +293,13 @@ void cluster_reads_par(const std::string& filename)
   int countIterations = 0;
   // sort by k-mer is first step (and then never again done)
 
-  // Pc == Pn
-
   // sort by k-mers and update Pn
   mxx::sort(start, pend, layer_comparator<0, tuple_t>(), MPI_COMM_WORLD, false);
-  // order of template params:
-  // template <uint8_t keyLayer, uint8_t reductionLayer, uint8_t resultLayer, typename T>
-  /*
-   * Indices inside tuple will go like this:
-   * 0 : KmerId
-   * 1 : P_new
-   * 2 : P_old
-   */
   typedef KmerReduceAndMarkAsInactive<0, Pc, Pn, tuple_t> KmerReducerType;
   KmerReducerType r1;
   r1(start, pend, MPI_COMM_WORLD);
   MP_TIMER_END_SECTION("iteration KMER phase completed");
 
-  // gather everything (for sequential test)
-  //std::vector<tuple_t> globalvec = mxx::gatherv(localVec);
 
   // remove the MAX thing after k-mer reduce:
   // TODO: own k-mer reduction function!
@@ -329,7 +310,7 @@ void cluster_reads_par(const std::string& filename)
   }
 
   while (keepGoing) {
-    mxx::sort(localVector.begin(), localVector.end(), // TODO: only active partitions
+    mxx::sort(localVector.begin(), localVector.end(),
         [](const tuple_t& x, const tuple_t&y){
         return (std::get<Pc>(x) < std::get<Pc>(y)
             || (std::get<Pc>(x) == std::get<Pc>(y)
@@ -405,7 +386,6 @@ void cluster_reads_par(const std::string& filename)
 
       // check if all elements of the bucket are identical -> set them to
       // their Pn.
-      // TODO: remove (inactive) if already Pn==Pc -> done
       if (min_pn == max_pn) {
           for (auto it = eqr.first; it != eqr.second; ++it) {
             std::get<Pc>(*it) = std::get<Pn>(*it);
@@ -512,8 +492,6 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
 
   // define k-mer and operator types
   typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType> tuple_t;
-  typedef PartitionReduceAndMarkAsInactive<Pc, Pn, tuple_t> PartitionReducerType;
-  ActivePartitionPredicate<Pn, tuple_t> app;
 
   // get communicaiton parameters
   int rank, p;
@@ -535,7 +513,6 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
    * 2 : P_old
    */
 
-  //MP_TIMER_START();
   MP_TIMER_START();
 
   // Populate localVector for each rank and return the vector with all the tuples
@@ -544,40 +521,22 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
 
   MP_TIMER_END_SECTION("Read data from disk");
 
-
-  // re-distirbute vector into equal block partition
-  //mxx::block_decompose(localVector);
-
   assert(localVector.size() > 0);
   auto start = localVector.begin();
   auto end = localVector.end();
   auto pend = end;
 
-
   //Sort tuples by KmerId
   bool keepGoing = true;
   int countIterations = 0;
-  // sort by k-mer is first step (and then never again done)
 
-  // Pc == Pn
 
   // sort by k-mers and update Pn
   mxx::sort(start, pend, layer_comparator<0, tuple_t>(), MPI_COMM_WORLD, false);
-  // order of template params:
-  // template <uint8_t keyLayer, uint8_t reductionLayer, uint8_t resultLayer, typename T>
-  /*
-   * Indices inside tuple will go like this:
-   * 0 : KmerId
-   * 1 : P_new
-   * 2 : P_old
-   */
   typedef KmerReduceAndMarkAsInactive<0, Pc, Pn, tuple_t> KmerReducerType;
   KmerReducerType r1;
   r1(start, pend, MPI_COMM_WORLD);
   MP_TIMER_END_SECTION("iteration KMER phase completed");
-
-  // gather everything (for sequential test)
-  //std::vector<tuple_t> globalvec = mxx::gatherv(localVec);
 
   // remove the MAX thing after k-mer reduce:
   // TODO: own k-mer reduction function!
@@ -588,7 +547,7 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
   }
 
   while (keepGoing) {
-    mxx::sort(localVector.begin(), pend, // TODO: only active partitions
+    mxx::sort(localVector.begin(), pend,
         [](const tuple_t& x, const tuple_t&y){
         return (std::get<Pc>(x) < std::get<Pc>(y)
             || (std::get<Pc>(x) == std::get<Pc>(y)
@@ -670,7 +629,6 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
 
       // check if all elements of the bucket are identical -> set them to
       // their Pn.
-      // TODO: remove (inactive) if already Pn==Pc -> done
       if (min_pn == max_pn) {
           if (max_pn == inactive_partition-1)
           {
@@ -751,7 +709,6 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
 
 
     MP_TIMER_END_SECTION("local flips");
-    // TODO: insert at end, swap into active partition
     std::size_t nnew = newtuples.size();
     // insert at end and swap into active part of vector
     std::size_t active_size = pend - localVector.begin();
@@ -764,7 +721,6 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
     pend = localVector.begin() + active_size + nnew;
     MP_TIMER_END_SECTION("vector inserts");
 
-    // re-partition whole vector (TODO: only active)
     pend = std::partition(localVector.begin(), pend, [](tuple_t& t){return std::get<Pn>(t) != inactive_partition;});
     MP_TIMER_END_SECTION("std::partition");
 
