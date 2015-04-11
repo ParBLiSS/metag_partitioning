@@ -29,7 +29,7 @@ static char dummyBool;
 
 //To output all the kmers and their respective partitionIds
 //Switch on while testing
-#define OUTPUTTOFILE 1
+#define OUTPUTTOFILE 0
 
 
 template<uint8_t layer, typename T >
