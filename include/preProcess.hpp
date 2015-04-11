@@ -132,6 +132,7 @@ void trimReadswithHighMedianOrMaxCoverage(std::vector<T>& localvector, MPI_Comm 
     //Compute the max 
     auto currentMax = *std::max_element(innerLoopBound.first, innerLoopBound.second, tmpCmp);
 
+    //Either mark the tuples as removed or restore their tmpLayer
     if(std::get<tmpLayer>(currentMedian) > medianCutOff || std::get<tmpLayer>(currentMax) > frequencyCutOff) 
       std::for_each(innerLoopBound.first, innerLoopBound.second, [](T &t){ std::get<tmpLayer>(t) = MAX;});
     else
@@ -152,9 +153,6 @@ void trimReadswithHighMedianOrMaxCoverage(std::vector<T>& localvector, MPI_Comm 
   auto totalKmersRemoved = mxx::reduce(localElementsRemoved);
 
   if(!rank) std::cerr << "[PREPROCESS: Digital Norm] " << totalKmersRemoved << " kmers removed from dataset\n"; 
-
- 
- 
 }
 
 /*
