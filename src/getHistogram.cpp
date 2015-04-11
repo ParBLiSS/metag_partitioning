@@ -78,12 +78,11 @@ int main(int argc, char** argv)
   std::vector<tuple_t> localVector;
   generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, MPI_COMM_WORLD);
 
+  //Pre-process
+  trimHighFrequencyKmer<0, 1>(localVector);
 
   // re-distirbute vector into equal block partition
   mxx::block_decompose(localVector);
-
-  //Pre-process
-  trimHighFrequencyKmer<0, 1>(localVector);
 
   assert(localVector.size() > 0);
   auto start = localVector.begin();
