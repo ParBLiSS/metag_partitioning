@@ -30,7 +30,7 @@ void trimHighFrequencyKmer(std::vector<T>& localvector, MPI_Comm comm = MPI_COMM
   static layer_comparator<kmerLayer, T> kmerCmp;
 
   //Sort by kmer id
-  mxx::sort(localvector.begin(), localvector.end(), kmerCmp); 
+  mxx::sort(localvector.begin(), localvector.end(), kmerCmp, comm, false); 
 
   auto start = localvector.begin();
   auto end = localvector.end();
