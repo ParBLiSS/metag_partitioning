@@ -79,7 +79,9 @@ int main(int argc, char** argv)
   generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, MPI_COMM_WORLD);
 
   //Pre-process
-  trimHighFrequencyKmer<0, 1>(localVector);
+  MP_TIMER_START();
+  trimReadswithHighMedianOrMaxCoverage<0,1,2>(localVector);
+  MP_TIMER_END_SECTION("Digital normalization completed");
 
   // re-distirbute vector into equal block partition
   mxx::block_decompose(localVector);
