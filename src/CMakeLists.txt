@@ -36,6 +36,11 @@ target_link_libraries(sort_merge_tuples_equal_kmer ${EXTRA_LIBS})
 target_link_libraries(sort_merge_tuples_equal_kmer bliss-common)
 target_link_libraries(sort_merge_tuples_equal_kmer mp-timer)
 
+add_executable(log-sort log_sort.cpp)
+target_link_libraries(log-sort ${EXTRA_LIBS})
+target_link_libraries(log-sort bliss-common)
+target_link_libraries(log-sort mp-timer)
+
 add_executable(statAndCompare statAndCompare.cpp)
 target_link_libraries(statAndCompare ${EXTRA_LIBS})
 
