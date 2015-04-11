@@ -10,6 +10,7 @@
 #include "sortTuples.hpp"
 #include "parallel_fastq_iterate.hpp"
 #include "utils.hpp"
+#include "preProcess.hpp"
 
 #include <mxx/collective.hpp>
 #include <mxx/distribution.hpp>
@@ -80,6 +81,9 @@ int main(int argc, char** argv)
 
   // re-distirbute vector into equal block partition
   mxx::block_decompose(localVector);
+
+  //Pre-process
+  trimHighFrequencyKmer<0, 1>(localVector);
 
   assert(localVector.size() > 0);
   auto start = localVector.begin();
