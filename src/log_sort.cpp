@@ -43,8 +43,6 @@ void cluster_reads_seq(const std::string& filename)
 
   // define k-mer and operator types
   typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType> tuple_t;
-  typedef PartitionReduceAndMarkAsInactive<2, 1, tuple_t> PartitionReducerType;
-  ActivePartitionPredicate<1, tuple_t> app;
 
   // get communicaiton parameters
   int rank, p;
@@ -158,7 +156,6 @@ void cluster_reads_seq(const std::string& filename)
       // TODO: compress the done elements!
       // check if all identical, then done!
       if (std::get<1>(*eqr.first) == std::get<1>(*(eqr.second-1))) {
-          //std::cout << "all done for bucket " << std::get<2>(*eqr.first) << std::endl;
           for (auto it = eqr.first; it != eqr.second; ++it) {
             std::get<2>(*it) = std::get<1>(*it);
           }
@@ -177,7 +174,6 @@ void cluster_reads_seq(const std::string& filename)
         if (std::get<1>(*it) == prev_pn || std::get<1>(*it) == std::get<2>(*it)) {
           if (!found_flip) {
             // set flipped
-            //std::cout << "Found repeat/eq (" << std::get<1>(*it) << "," << std::get<2>(*it) << ")" << std::endl;
             found_flip = true;
             std::get<1>(*it) = std::get<2>(*it);
             std::get<2>(*it) = min;
@@ -203,7 +199,6 @@ void cluster_reads_seq(const std::string& filename)
         tuple_t t = *eqr.first;
         std::swap(std::get<1>(t),std::get<2>(t));
         newtuples.push_back(t);
-        std::cout << "no flip found!" << std::endl;
       }
 
       // next range
@@ -352,7 +347,7 @@ void cluster_reads_par(const std::string& filename)
           return y;
           else return x;}
         , MPI_COMM_WORLD);
-    tuple_t next_el = mxx::left_shift(*begin, MPI_COMM_WORLD);
+    //tuple_t next_el = mxx::left_shift(*begin, MPI_COMM_WORLD);
 
     MP_TIMER_END_SECTION("reductions");
 
@@ -411,7 +406,6 @@ void cluster_reads_par(const std::string& filename)
         if (std::get<Pn>(*it) == prev_pn || std::get<Pn>(*it) == std::get<Pc>(*it)) {
           if (!found_flip) {
             // set flipped
-            //std::cout << "Found repeat/eq (" << std::get<1>(*it) << "," << std::get<2>(*it) << ")" << std::endl;
             found_flip = true;
             std::get<Pn>(*it) = std::get<Pc>(*it);
             std::get<Pc>(*it) = min_pn;
@@ -436,7 +430,6 @@ void cluster_reads_par(const std::string& filename)
         tuple_t t = *eqr.first;
         std::swap(std::get<Pn>(t),std::get<Pc>(t));
         newtuples.push_back(t);
-        std::cout << "no flip found!" << std::endl;
       }
 
       // next range
@@ -555,8 +548,6 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
         }, MPI_COMM_WORLD, false);
     MP_TIMER_END_SECTION("mxx::sort");
 
-    //std::cout << "vector= " << localVector << std::endl;
-
     layer_comparator<Pc, tuple_t> pc_comp;
 
     // scan and find new p
@@ -565,33 +556,55 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
     std::vector<tuple_t> newtuples;
     bool done = true;
 
-    // find last bucket start and send across boundaries!
-    tuple_t last_min = *(pend-1);
-    last_min = *std::lower_bound(begin, pend, last_min, pc_comp);
-    // for each processor, get the first element of the last most element
-    tuple_t prev_min = mxx::exscan(last_min,
-        [](const tuple_t& x, const tuple_t& y){
-          // return max Pc, if equal, return min Pn
-          if (std::get<Pc>(x) < std::get<Pc>(y) ||
-            (std::get<Pc>(x) == std::get<Pc>(y)
-             && std::get<Pn>(x) > std::get<Pn>(y)))
-          return y;
-          else return x;}
-        , MPI_COMM_WORLD);
-    tuple_t prev_el = mxx::right_shift(*(pend-1), MPI_COMM_WORLD);
+    // TODO: if a local size becomes 0, then there might be an issue with the
+    // min/max reductions:
 
-    // get the next element
-    tuple_t first_max = *(std::upper_bound(begin, pend, *begin, pc_comp)-1);
-    tuple_t next_max = mxx::reverse_exscan(first_max,
-        [](const tuple_t& x, const tuple_t& y){
-          // return min Pc, if equal, return max Pn
-          if (std::get<Pc>(x) > std::get<Pc>(y) ||
-            (std::get<Pc>(x) == std::get<Pc>(y)
-             && std::get<Pn>(x) < std::get<Pn>(y)))
-          return y;
-          else return x;}
-        , MPI_COMM_WORLD);
-    tuple_t next_el = mxx::left_shift(*begin, MPI_COMM_WORLD);
+    // TODO: something is still wrong!
+    std::size_t local_size = pend - localVector.begin();
+    std::vector<std::size_t> distr = mxx::allgather(local_size, MPI_COMM_WORLD);
+    if (rank == 0) {
+      std::cout << "local_sizes: " << distr << std::endl;
+    }
+
+    int color = local_size == 0 ? 0 : 1;
+    MPI_Comm nonempty_comm;
+    MPI_Comm_split(MPI_COMM_WORLD, color, rank, &nonempty_comm);
+    int active_rank, active_p;
+    MPI_Comm_rank(nonempty_comm, &active_rank);
+    MPI_Comm_size(nonempty_comm, &active_p);
+
+    tuple_t last_min, prev_min, prev_el, first_max, next_max, next_el;
+    if (local_size != 0) {
+      // find last bucket start and send across boundaries!
+      last_min = *(pend-1);
+      last_min = *std::lower_bound(begin, pend, last_min, pc_comp);
+      // for each processor, get the first element of the last most element
+      prev_min = mxx::exscan(last_min,
+          [](const tuple_t& x, const tuple_t& y){
+            // return max Pc, if equal, return min Pn
+            if (std::get<Pc>(x) < std::get<Pc>(y) ||
+              (std::get<Pc>(x) == std::get<Pc>(y)
+               && std::get<Pn>(x) > std::get<Pn>(y)))
+            return y;
+            else return x;}
+          , nonempty_comm);
+      prev_el = mxx::right_shift(*(pend-1), nonempty_comm);
+
+      // get the next element
+      first_max = *(std::upper_bound(begin, pend, *begin, pc_comp)-1);
+      next_max = mxx::reverse_exscan(first_max,
+          [](const tuple_t& x, const tuple_t& y){
+            // return min Pc, if equal, return max Pn
+            if (std::get<Pc>(x) > std::get<Pc>(y) ||
+              (std::get<Pc>(x) == std::get<Pc>(y)
+               && std::get<Pn>(x) < std::get<Pn>(y)))
+            return y;
+            else return x;}
+          , nonempty_comm);
+      next_el = mxx::left_shift(*begin, nonempty_comm);
+    }
+
+    MPI_Comm_free(&nonempty_comm);
 
     MP_TIMER_END_SECTION("reductions");
 
@@ -603,20 +616,20 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
 
       // get smallest Pn in bucket
       auto min_pn = std::get<Pn>(*eqr.first);
-      if (rank > 0 && std::get<Pc>(prev_min) == std::get<Pc>(*eqr.first)) {
+      if (active_rank > 0 && std::get<Pc>(prev_min) == std::get<Pc>(*eqr.first)) {
         // first bucket and it starts on the processor to the left
         min_pn = std::get<Pn>(prev_min);
       }
 
       // get largest Pn in bucket
       auto max_pn = std::get<Pn>(*(eqr.second-1));
-      if (rank < p-1 && std::get<Pc>(next_max) == std::get<Pc>(*eqr.first)) {
+      if (active_rank < active_p-1 && std::get<Pc>(next_max) == std::get<Pc>(*eqr.first)) {
           max_pn = std::get<Pn>(next_max);
       }
 
       // remove single element buckets
-      if (eqr.first + 1 == eqr.second && (rank == 0
-          || (rank > 0 && std::get<Pc>(*eqr.first) != std::get<Pc>(prev_el)))) {
+      if (eqr.first + 1 == eqr.second && (active_rank == 0
+          || (active_rank > 0 && std::get<Pc>(*eqr.first) != std::get<Pc>(prev_el)))) {
         // single element -> no need to stick around
         if (std::get<Pn>(*eqr.first) == inactive_partition-1)
           //std::get<Pn>(*eqr.first) = std::get<Pc>(*eqr.first);
@@ -676,7 +689,6 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
         if (std::get<Pn>(*it) == prev_pn || std::get<Pn>(*it) == std::get<Pc>(*it)) {
           if (!found_flip) {
             // set flipped
-            //std::cout << "Found repeat/eq (" << std::get<1>(*it) << "," << std::get<2>(*it) << ")" << std::endl;
             found_flip = true;
             std::get<Pn>(*it) = std::get<Pc>(*it);
             std::get<Pc>(*it) = min_pn;
@@ -736,7 +748,6 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
     if(!rank)
       std::cout << "[RANK 0] : Iteration # " << countIterations <<"\n";
   }
-
 
 #if OUTPUTTOFILE
   //Output all (Kmer, PartitionIds) to a file in sorted order by Kmer
