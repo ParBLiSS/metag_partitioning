@@ -70,7 +70,6 @@ void cluster_reads_seq(const std::string& filename)
   // Populate localVector for each rank and return the vector with all the tuples
   std::vector<tuple_t> localVector;
   generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, MPI_COMM_WORLD);
-
   MP_TIMER_END_SECTION("Read data from disk");
 
 
@@ -134,26 +133,17 @@ void cluster_reads_seq(const std::string& filename)
     std::vector<tuple_t> newtuples;
     bool done = true;
     // for each range/bucket
-    //
-    // exchange bucket min/start !?
-    //
     for(; begin != end; ) {
       // find bucket (linearly)
       auto eqr = findRange(begin, end, *begin, pc_comp);
       auto min = std::get<1>(*eqr.first);
 
-      //int i = eqr.first - begin;
-      //int j = eqr.second - begin;
-      //assert(min != 676);
-
       if (eqr.first + 1 == eqr.second) {
-        // single element, wait till paired up!
-        //done = false;
         std::get<2>(*eqr.first) = std::get<1>(*eqr.first); // now useless!
         begin = eqr.second;
         continue;
       }
-      // TODO: compress the done elements!
+
       // check if all identical, then done!
       if (std::get<1>(*eqr.first) == std::get<1>(*(eqr.second-1))) {
           for (auto it = eqr.first; it != eqr.second; ++it) {
@@ -182,11 +172,10 @@ void cluster_reads_seq(const std::string& filename)
             std::get<1>(*it) = min;
             std::get<2>(*it) = min;
           }
-          // Pn > Pc (a flipped thing) -> unflip and return
-        } else if (std::get<1>(*it) > std::get<2>(*it)) {
-          std::swap(std::get<1>(*it),std::get<2>(*it));
-          std::get<1>(*it) = min;
         } else {
+          // if either Pn > Pc or Pn < Pc, we flip the entry and return it
+          // to `Pn` with the new minimum
+          // update tuple, set new min and flip
           // Pc > Pn => new min
           // update tuple, set new min and flip
           std::swap(std::get<1>(*it),std::get<2>(*it));
@@ -424,7 +413,7 @@ void cluster_reads_par(const std::string& filename)
         prev_pn = next_pn;
       }
 
-      if (!found_flip) {
+      if (!found_flip && countIterations >= 2) {
         // TODO: don't do this for the first or last bucket...
         // TODO: we need only one flipped per bucket
         tuple_t t = *eqr.first;
@@ -522,7 +511,6 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
   //Sort tuples by KmerId
   bool keepGoing = true;
   int countIterations = 0;
-
 
   // sort by k-mers and update Pn
   mxx::sort(start, pend, layer_comparator<0, tuple_t>(), MPI_COMM_WORLD, false);
@@ -707,7 +695,7 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
         prev_pn = next_pn;
       }
 
-      if (!found_flip) {
+      if (!found_flip && countIterations >= 2) {
         // TODO: don't do this for the first or last bucket...
         // TODO: we need only one flipped per bucket
         tuple_t t = *eqr.first;
