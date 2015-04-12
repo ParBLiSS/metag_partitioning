@@ -203,7 +203,7 @@ void cluster_reads_seq(const std::string& filename)
         tuple_t t = *eqr.first;
         std::swap(std::get<1>(t),std::get<2>(t));
         newtuples.push_back(t);
-        std::cout << "no flip found!" << std::endl;
+        //std::cout << "no flip found!" << std::endl;
       }
 
       // next range
@@ -456,7 +456,7 @@ void cluster_reads_par(const std::string& filename)
         tuple_t t = *eqr.first;
         std::swap(std::get<Pn>(t),std::get<Pc>(t));
         newtuples.push_back(t);
-        std::cout << "no flip found!" << std::endl;
+        //std::cout << "no flip found!" << std::endl;
       }
 
       // next range
