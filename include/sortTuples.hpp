@@ -7,6 +7,7 @@
 //Includes from mxx library
 #include <mxx/sort.hpp>
 #include <mxx/shift.hpp>
+#include <mxx/timer.hpp>
 
 //Own includes
 #include "prettyprint.hpp"
@@ -14,14 +15,13 @@
 #include <fstream>
 #include <iostream>
 
-#include "timer.hpp"
 
 static char dummyBool;
 
 #define MP_ENABLE_TIMER 1
 #if MP_ENABLE_TIMER
-#define MP_TIMER_START() TIMER_START()
-#define MP_TIMER_END_SECTION(str) TIMER_END_SECTION(str)
+#define MP_TIMER_START() mxx::section_timer timer;
+#define MP_TIMER_END_SECTION(str) timer.end_section(str);
 #else
 #define MP_TIMER_START()
 #define MP_TIMER_END_SECTION(str)

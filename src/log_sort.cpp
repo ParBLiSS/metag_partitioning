@@ -21,9 +21,7 @@
 #include <mxx/collective.hpp>
 #include <mxx/distribution.hpp>
 #include <mxx/reduction.hpp>
-
-//from external repository
-#include <timer.hpp>
+#include <mxx/timer.hpp>
 
 #include <sstream>
 
@@ -54,8 +52,8 @@ void cluster_reads_seq(const std::string& filename)
     std::cout << "Filename : " <<  filename << "\n"; 
   }
 
-  timer t;
-  double startTime = t.get_ms();
+  mxx::timer t;
+  double startTime = t.elapsed();
 
   /*
    * Indices inside tuple will go like this:
@@ -209,7 +207,7 @@ void cluster_reads_seq(const std::string& filename)
   writeTuplesAll<0, 2, tuple_t>(localVector.begin(), localVector.end(), filename);
 #endif
 
-  double time = t.get_ms() - startTime;
+  double time = t.elapsed() - startTime;
 
 
     if(!rank)
@@ -248,8 +246,8 @@ void cluster_reads_par(const std::string& filename)
     std::cout << "Filename : " <<  filename << "\n"; 
   }
 
-  timer t;
-  double startTime = t.get_ms();
+  mxx::timer t;
+  double startTime = t.elapsed();
 
   /*
    * Indices inside tuple will go like this:
@@ -413,7 +411,7 @@ void cluster_reads_par(const std::string& filename)
         prev_pn = next_pn;
       }
 
-      if (!found_flip && countIterations >= 2) {
+      if (!found_flip) {
         // TODO: don't do this for the first or last bucket...
         // TODO: we need only one flipped per bucket
         tuple_t t = *eqr.first;
@@ -445,7 +443,7 @@ void cluster_reads_par(const std::string& filename)
   writeTuplesAll<0, Pc, tuple_t>(localVector.begin(), localVector.end(), filename);
 #endif
 
-  double time = t.get_ms() - startTime;
+  double time = t.elapsed() - startTime;
 
 
     if(!rank)
@@ -485,8 +483,8 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
     std::cout << "Filename : " <<  filename << "\n";
   }
 
-  timer t;
-  double startTime = t.get_ms();
+  mxx::timer t;
+  double startTime = t.elapsed();
 
   /*
    * Indices inside tuple will go like this:
@@ -696,7 +694,7 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
         prev_pn = next_pn;
       }
 
-      if (!found_flip && countIterations >= 2) {
+      if (!found_flip) {
         // TODO: don't do this for the first or last bucket...
         // TODO: we need only one flipped per bucket
         tuple_t t = *eqr.first;
@@ -745,7 +743,7 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
   writeTuplesAll<0, Pc, tuple_t>(localVector.begin(), localVector.end(), filename);
 #endif
 
-  double time = t.get_ms() - startTime;
+  double time = t.elapsed() - startTime;
 
 
     if(!rank)
