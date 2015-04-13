@@ -2,9 +2,7 @@
 #include <mpi.h>
 #include <iostream> 
 
-//from external repository
-#include "timer.hpp"
-
+#include <mxx/timer.hpp>
 
 //File includes from BLISS
 #include "common/kmer.hpp"
@@ -63,8 +61,8 @@ int main(int argc, char** argv)
     std::cout << "Filename : " <<  filename << "\n"; 
   }
   
-  timer t;
-  double start = t.get_ms();
+  mxx::timer t;
+  double start = t.elapsed();
 
   //Initialize the KmerVector
   /*
@@ -124,7 +122,7 @@ int main(int argc, char** argv)
 
 #endif
 
-  double time = t.get_ms() - start;
+  double time = t.elapsed() - start;
   if(!rank)
   {
     std::cout << "Algorithm took " << countIterations << " iteration.\n"; 

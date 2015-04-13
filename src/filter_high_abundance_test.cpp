@@ -49,7 +49,6 @@ int main(int argc, char** argv)
     std::cout << "Filename : " <<  filename << "\n"; 
   }
 
-  timer t;
   /*
    * Indices inside tuple will go like this:
    * 0 : KmerId
