@@ -11,8 +11,7 @@
 
 // include mxx sort
 #include <mxx/sort.hpp>
-// from external repository
-#include <timer.hpp>
+#include <mxx/timer.hpp>
 
 // own includes
 #include "sortTuples.hpp"
@@ -65,8 +64,8 @@ int main(int argc, char** argv)
         std::cout << "Filename : " <<  filename << "\n"; 
     }
 
-    timer t;
-    double startTime = t.get_ms();
+    mxx::timer t;
+    double startTime = t.elapsed();
 
 
     // read input file
@@ -161,7 +160,7 @@ int main(int argc, char** argv)
 #endif
 
     // stop time and output
-    double time = t.get_ms() - startTime;
+    double time = t.elapsed() - startTime;
     if(!rank) {
         std::cout << "Algorithm took " << countIterations << " iteration.\n";
         std::cout << "TOTAL TIME : " << time << " ms.\n";
