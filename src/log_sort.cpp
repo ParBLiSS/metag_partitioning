@@ -411,7 +411,7 @@ void cluster_reads_par(const std::string& filename)
         prev_pn = next_pn;
       }
 
-      if (!found_flip && countIterations >= 2) {
+      if (!found_flip) {
         // TODO: don't do this for the first or last bucket...
         // TODO: we need only one flipped per bucket
         tuple_t t = *eqr.first;
@@ -693,7 +693,7 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
         prev_pn = next_pn;
       }
 
-      if (!found_flip && countIterations >= 2) {
+      if (!found_flip) {
         // TODO: don't do this for the first or last bucket...
         // TODO: we need only one flipped per bucket
         tuple_t t = *eqr.first;
