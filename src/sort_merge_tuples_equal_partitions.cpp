@@ -12,9 +12,7 @@
 
 #include <mxx/collective.hpp>
 #include <mxx/distribution.hpp>
-
-//from external repository
-#include <timer.hpp>
+#include <mxx/timer.hpp>
 
 #include <sstream>
 
@@ -62,8 +60,8 @@ int main(int argc, char** argv)
     std::cout << "Filename : " <<  filename << "\n"; 
   }
 
-  timer t;
-  double startTime = t.get_ms();
+  mxx::timer t;
+  double startTime = t.elapsed();
 
   /*
    * Indices inside tuple will go like this:
@@ -150,7 +148,7 @@ int main(int argc, char** argv)
   writeTuplesAll<0, 2, tuple_t>(localVector.begin(), localVector.end(), filename);
 #endif
 
-  double time = t.get_ms() - startTime;
+  double time = t.elapsed() - startTime;
 
 
     if(!rank)

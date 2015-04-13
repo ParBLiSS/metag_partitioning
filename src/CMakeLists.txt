@@ -3,10 +3,6 @@ cmake_minimum_required(VERSION 2.6)
 # project settings
 project(Metagenomics-src)
 
-# timer shared lib
-add_library(mp-timer timer.cpp)
-target_link_libraries(mp-timer rt)
-
 add_executable(parallel_fastq_iterate run_fastq_iterate.cpp)
 target_link_libraries(parallel_fastq_iterate ${EXTRA_LIBS})
 target_link_libraries(parallel_fastq_iterate bliss-common)
@@ -14,32 +10,26 @@ target_link_libraries(parallel_fastq_iterate bliss-common)
 add_executable(sort_merge_tuples sort_merge_tuples.cpp)
 target_link_libraries(sort_merge_tuples ${EXTRA_LIBS})
 target_link_libraries(sort_merge_tuples bliss-common)
-target_link_libraries(sort_merge_tuples mp-timer)
 
 add_executable(sort_merge_tuples_inactive_partition sort_merge_tuples_inactive_partitions.cpp)
 target_link_libraries(sort_merge_tuples_inactive_partition ${EXTRA_LIBS})
 target_link_libraries(sort_merge_tuples_inactive_partition bliss-common)
-target_link_libraries(sort_merge_tuples_inactive_partition mp-timer)
 
 add_executable(sort_merge_tuples_equal_partition sort_merge_tuples_equal_partitions.cpp)
 target_link_libraries(sort_merge_tuples_equal_partition ${EXTRA_LIBS})
 target_link_libraries(sort_merge_tuples_equal_partition bliss-common)
-target_link_libraries(sort_merge_tuples_equal_partition mp-timer)
 
 add_executable(sort_merge_tuples_interior_kmer sort_merge_tuples_interior_kmers.cpp)
 target_link_libraries(sort_merge_tuples_interior_kmer ${EXTRA_LIBS})
 target_link_libraries(sort_merge_tuples_interior_kmer bliss-common)
-target_link_libraries(sort_merge_tuples_interior_kmer mp-timer)
 
 add_executable(sort_merge_tuples_equal_kmer sort_merge_tuples_equal_kmers.cpp)
 target_link_libraries(sort_merge_tuples_equal_kmer ${EXTRA_LIBS})
 target_link_libraries(sort_merge_tuples_equal_kmer bliss-common)
-target_link_libraries(sort_merge_tuples_equal_kmer mp-timer)
 
 add_executable(log-sort log_sort.cpp)
 target_link_libraries(log-sort ${EXTRA_LIBS})
 target_link_libraries(log-sort bliss-common)
-target_link_libraries(log-sort mp-timer)
 
 add_executable(statAndCompare statAndCompare.cpp)
 target_link_libraries(statAndCompare ${EXTRA_LIBS})
@@ -47,9 +37,7 @@ target_link_libraries(statAndCompare ${EXTRA_LIBS})
 add_executable(getHistogram getHistogram.cpp)
 target_link_libraries(getHistogram bliss-common)
 target_link_libraries(getHistogram ${EXTRA_LIBS})
-target_link_libraries(getHistogram mp-timer)
 
 add_executable(filter_high_abundance_test filter_high_abundance_test.cpp)
 target_link_libraries(filter_high_abundance_test bliss-common)
 target_link_libraries(filter_high_abundance_test ${EXTRA_LIBS})
-target_link_libraries(filter_high_abundance_test mp-timer)
