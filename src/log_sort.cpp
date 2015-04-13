@@ -551,6 +551,7 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
     std::size_t local_size = pend - localVector.begin();
     std::vector<std::size_t> distr = mxx::allgather(local_size, MPI_COMM_WORLD);
     if (rank == 0) {
+      std::cout << "local_sizes: [MAX : " << *std::max_element(distr.begin(), distr.end()) << ", MIN: " << *std::min_element(distr.begin(), distr.end()) << ", SUM: " << std::accumulate(distr.begin(), distr.end(), 0) << "]" << std::endl;
       std::cout << "local_sizes: " << distr << std::endl;
     }
 
