@@ -78,7 +78,7 @@ int main(int argc, char** argv)
 
   //Pre-process
   MP_TIMER_START();
-  trimReadswithHighMedianOrMaxCoverage<0,1,2>(localVector);
+  trimReadswithHighMedianOrMaxCoverage<0,1,2,3,4>(localVector);
   MP_TIMER_END_SECTION("Digital normalization completed");
 
   // re-distirbute vector into equal block partition
