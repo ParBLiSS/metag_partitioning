@@ -308,6 +308,13 @@ void cluster_reads_par(const std::string& filename)
     std::vector<tuple_t> newtuples;
     bool done = true;
 
+    std::size_t local_size = end - begin;
+    std::vector<std::size_t> distr = mxx::allgather(local_size, MPI_COMM_WORLD);
+    if (rank == 0) {
+      std::cout << "local_sizes: [MAX : " << *std::max_element(distr.begin(), distr.end()) << ", MIN: " << *std::min_element(distr.begin(), distr.end()) << ", SUM: " << std::accumulate(distr.begin(), distr.end(), 0) << "]" << std::endl;
+      std::cout << "local_sizes: " << distr << std::endl;
+    }
+
     // find last bucket start and send across boundaries!
     tuple_t last_min = *(end-1);
     last_min = *std::lower_bound(begin, end, last_min, pc_comp);
