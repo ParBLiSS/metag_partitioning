@@ -32,11 +32,21 @@ static char dummyBool;
 #define OUTPUTTOFILE 0
 
 
+//Custom comparator for tuples
 template<uint8_t layer, typename T >
 struct layer_comparator : public std::binary_function<T, T, bool>
 {
     bool operator()(const T& x, const T& y) {
       return std::get<layer>(x) < std::get<layer>(y);
+    }
+};
+
+//Custom comparator for tuples
+template<uint8_t layer, unsigned int divisionFactor, typename T>
+struct layer_comparator_msb : public std::binary_function<T, T, bool>
+{
+    bool operator()(const T& x, const T& y) {
+      return (std::get<layer>(x))/divisionFactor < (std::get<layer>(y))/divisionFactor;
     }
 };
 

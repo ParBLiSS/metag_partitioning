@@ -64,7 +64,7 @@ int main(int argc, char** argv)
   // re-distirbute vector into equal block partition
   assert(localVector.size() > 0);
 
-  trimHighFrequencyKmer<0, 1>(localVector);
+  trimReadswithHighMedianOrMaxCoverage<0,1,2>(localVector);
 
 
   MPI_Finalize();
