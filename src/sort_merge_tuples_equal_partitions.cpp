@@ -74,7 +74,8 @@ int main(int argc, char** argv)
 
   // Populate localVector for each rank and return the vector with all the tuples
   std::vector<tuple_t> localVector;
-  generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, MPI_COMM_WORLD);
+  std::vector<bool> readFilterFlags;
+  generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, readFilterFlags, MPI_COMM_WORLD);
 
   MP_TIMER_END_SECTION("Read data from disk");
 

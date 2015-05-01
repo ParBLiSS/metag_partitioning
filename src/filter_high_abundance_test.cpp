@@ -58,13 +58,14 @@ int main(int argc, char** argv)
 
   // Populate localVector for each rank and return the vector with all the tuples
   std::vector<tuple_t> localVector;
-  generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, MPI_COMM_WORLD);
+  std::vector<bool> readFilterFlags;
+  generateReadKmerVector<KmerType, AlphabetType, ReadIdType, false> (filename, localVector, readFilterFlags, MPI_COMM_WORLD);
 
 
   // re-distirbute vector into equal block partition
   assert(localVector.size() > 0);
 
-  trimReadswithHighMedianOrMaxCoverage<0,1,2>(localVector);
+  trimReadswithHighMedianOrMaxCoverage<0,1,2>(localVector, readFilterFlags);
 
 
   MPI_Finalize();

@@ -40,7 +40,8 @@ int main(int argc, char** argv)
   std::vector<tuple_t> localVector;
 
   //Populate localVector for each rank
-  generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector); 
+  std::vector<bool> readFilterFlags;
+  generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, readFilterFlags, MPI_COMM_WORLD);
 
   MPI_Finalize();   
   return(0);

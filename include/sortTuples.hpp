@@ -41,15 +41,6 @@ struct layer_comparator : public std::binary_function<T, T, bool>
     }
 };
 
-//Custom comparator for tuples
-template<uint8_t layer, unsigned int divisionFactor, typename T>
-struct layer_comparator_msb : public std::binary_function<T, T, bool>
-{
-    bool operator()(const T& x, const T& y) {
-      return (std::get<layer>(x))/divisionFactor < (std::get<layer>(y))/divisionFactor;
-    }
-};
-
 //Prints out all the tuples on console
 //Not supposed to be used with large datasets while performance tests
 template <uint8_t keyLayer, uint8_t valueLayer, typename T>

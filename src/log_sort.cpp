@@ -67,7 +67,8 @@ void cluster_reads_seq(const std::string& filename)
 
   // Populate localVector for each rank and return the vector with all the tuples
   std::vector<tuple_t> localVector;
-  generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, MPI_COMM_WORLD);
+  std::vector<bool> readFilterFlags;
+  generateReadKmerVector<KmerType, AlphabetType, ReadIdType, false> (filename, localVector, readFilterFlags, MPI_COMM_WORLD);
   MP_TIMER_END_SECTION("Read data from disk");
 
 
@@ -260,7 +261,8 @@ void cluster_reads_par(const std::string& filename)
 
   // Populate localVector for each rank and return the vector with all the tuples
   std::vector<tuple_t> localVector;
-  generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, MPI_COMM_WORLD);
+  std::vector<bool> readFilterFlags;
+  generateReadKmerVector<KmerType, AlphabetType, ReadIdType, false> (filename, localVector, readFilterFlags, MPI_COMM_WORLD);
 
   MP_TIMER_END_SECTION("Read data from disk");
 
@@ -504,7 +506,8 @@ void cluster_reads_par_inactive(const std::string& filename, bool load_balance)
 
   // Populate localVector for each rank and return the vector with all the tuples
   std::vector<tuple_t> localVector;
-  generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, MPI_COMM_WORLD);
+  std::vector<bool> readFilterFlags;
+  generateReadKmerVector<KmerType, AlphabetType, ReadIdType, false> (filename, localVector, readFilterFlags, MPI_COMM_WORLD);
 
   MP_TIMER_END_SECTION("Read data from disk");
 
