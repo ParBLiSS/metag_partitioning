@@ -33,13 +33,15 @@
  * 4. Return the vector
  *
  * @tparam T                Type of elements in a vector to populate which should be std::vector of tuples
+ * @tparam filterSwitch     set to true when we should ignore reads based on values in readFilterFlags, after preprocessing
  * @param[out] localVector  Reference of vector to populate
  * @note                    This function should be called by all MPI ranks
  *                          No barrier at the end of the function execution
  */
-template <typename KmerType, typename Alphabet, typename ReadIDType, typename T>
+template <typename KmerType, typename Alphabet, typename ReadIDType, bool filterSwitch = false, typename T>
 void generateReadKmerVector(const std::string &filename,
                         std::vector<T>& localVector,
+                        std::vector<bool>& readFilterFlags,
                         MPI_Comm comm = MPI_COMM_WORLD) 
 {
   /// DEFINE file loader.  this only provides the L1 blocks, not reads.
@@ -115,18 +117,22 @@ void generateReadKmerVector(const std::string &filename,
       KmerIterType start(charStart, true);
       KmerIterType end(charEnd, false);
 
-      // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
-      for (; start != end; ++start)
+      //Either the filter switch is off or if its own, flag should be true
+      if(!filterSwitch || readFilterFlags[readId] == true)
       {
-        //Make tuple
-        //getPrefix() on kmer gives a 64-bit prefix for hashing assuming 
-        T tupleToInsert;
-        std::get<0>(tupleToInsert) = (*start).getPrefix();
-        std::get<1>(tupleToInsert) = readId;
-        std::get<2>(tupleToInsert) = readId;
+        // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
+        for (; start != end; ++start)
+        {
+          //Make tuple
+          //getPrefix() on kmer gives a 64-bit prefix for hashing assuming 
+          T tupleToInsert;
+          std::get<0>(tupleToInsert) = (*start).getPrefix();
+          std::get<1>(tupleToInsert) = readId;
+          std::get<2>(tupleToInsert) = readId;
 
-        //Insert tuple to vector
-        localVector.push_back(tupleToInsert);                                         // TODO: use emplace_back
+          //Insert tuple to vector
+          localVector.push_back(tupleToInsert);                                         // TODO: use emplace_back
+        }
       }
 
       readId += 1;

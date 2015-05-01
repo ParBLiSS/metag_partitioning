@@ -35,23 +35,6 @@ int main(int argc, char** argv)
     return 1;
   }
 
-  //Specify Kmer Type
-  const int kmerLength = 31;
-  typedef bliss::common::DNA AlphabetType;
-  typedef bliss::common::Kmer<kmerLength, AlphabetType, uint64_t> KmerType;
-
-  //Assuming kmer-length is less than 32
-  typedef uint64_t KmerIdType;
-
-  //Assuming read count is less than 4 Billion
-  typedef uint32_t ReadIdType;
-
-  // define k-mer and operator types
-  typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType> tuple_t;
-  typedef KmerReduceAndMarkAsInactive<0, 2, 1, tuple_t> KmerReducerType;
-  typedef PartitionReduceAndMarkAsInactive<2, 1, tuple_t> PartitionReducerType;
-  ActivePartitionPredicate<1, tuple_t> app;
-
   // get communicaiton parameters
   int rank, p;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -61,6 +44,49 @@ int main(int argc, char** argv)
     std::cout << "Runnning with " << p << " processors.\n"; 
     std::cout << "Filename : " <<  filename << "\n"; 
   }
+
+  /*
+   * PREPROCESSING PHASE
+   */
+  //Specify Kmer Type
+  const int kmerLength_pre = 20;
+  typedef bliss::common::DNA AlphabetType;
+  typedef bliss::common::Kmer<kmerLength_pre, AlphabetType, uint64_t> KmerType_pre;
+
+  //Assuming kmer-length is less than 32
+  typedef uint64_t KmerIdType;
+
+  //Assuming read count is less than 4 Billion
+  typedef uint32_t ReadIdType;
+
+  typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType> tuple_t;
+
+  // Populate localVector for each rank and return the vector with all the tuples
+  std::vector<tuple_t> localVector;
+  std::vector<bool> readFilterFlags;
+
+  //Generate kmer tuples, keep filter off
+  generateReadKmerVector<KmerType_pre, AlphabetType, ReadIdType, false> (filename, localVector, readFilterFlags, MPI_COMM_WORLD);
+
+  //Pre-process
+  MP_TIMER_START();
+  trimReadswithHighMedianOrMaxCoverage<0,1,2>(localVector, readFilterFlags);
+  MP_TIMER_END_SECTION("Digital normalization completed");
+
+  //Delete the local vector
+  localVector.resize(0);
+  
+
+  //Specify Kmer Type
+  const int kmerLength = 31;
+  typedef bliss::common::Kmer<kmerLength, AlphabetType, uint64_t> KmerType;
+
+
+  // define k-mer and operator types
+  typedef KmerReduceAndMarkAsInactive<0, 2, 1, tuple_t> KmerReducerType;
+  typedef PartitionReduceAndMarkAsInactive<2, 1, tuple_t> PartitionReducerType;
+  ActivePartitionPredicate<1, tuple_t> app;
+
 
   mxx::timer t;
   double startTime = t.elapsed();
@@ -73,13 +99,9 @@ int main(int argc, char** argv)
    */
 
   // Populate localVector for each rank and return the vector with all the tuples
-  std::vector<tuple_t> localVector;
-  generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, MPI_COMM_WORLD);
+  generateReadKmerVector<KmerType, AlphabetType, ReadIdType, true> (filename, localVector, readFilterFlags, MPI_COMM_WORLD);
+  readFilterFlags.clear();
 
-  //Pre-process
-  MP_TIMER_START();
-  trimReadswithHighMedianOrMaxCoverage<0,1,2>(localVector);
-  MP_TIMER_END_SECTION("Digital normalization completed");
 
   // re-distirbute vector into equal block partition
   mxx::block_decompose(localVector);

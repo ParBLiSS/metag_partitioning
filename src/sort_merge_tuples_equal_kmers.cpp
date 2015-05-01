@@ -68,8 +68,9 @@ int main(int argc, char** argv)
     // read input file
     MP_TIMER_START();
     std::vector<tuple_t> localVector;
+    std::vector<bool> readFilterFlags;
     //Populate localVector for each rank and return the vector with all the tuples
-    generateReadKmerVector<KmerType, AlphabetType, ReadIdType> (filename, localVector, comm);
+    generateReadKmerVector<KmerType, AlphabetType, ReadIdType, false> (filename, localVector, readFilterFlags, comm);
     MP_TIMER_END_SECTION("Read data from disk");
 
     // block partition vector
