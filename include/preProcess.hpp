@@ -10,34 +10,15 @@
 //Own includes
 #include "sortTuples.hpp"
 
-
 /*
- * @brief               Compute median coverage of kmers in a read. Discard the read if it is greater than "medianCutOff".
- *                      This process has been referred as digital normalization.
- *                      This process also trims off read if there is any kmer with coverage more than "frequencyCutOff".
- * @tparam kmerLSBCount Example: If Kmer index is built with size 31, but you would like to perform the operation below using size 20, specify 31-20 = 11
- *
+ * @brief                         Computes and saves the frequency of each kmer in the tmpLayer
+ *                                Does a sort by kmerLayer to do the counting
+ * @Note                          Don't change the local partition size during global sorts
  */
-template <unsigned int kmerLayer, unsigned int tmpLayer, unsigned int readIdLayer, uint8_t medianCutOff = 10,  uint8_t frequencyCutOff = 50, typename T>
-void trimReadswithHighMedianOrMaxCoverage(std::vector<T>& localvector, std::vector<bool>& readFilterFlags, MPI_Comm comm = MPI_COMM_WORLD)
+template <unsigned int kmerLayer, unsigned int tmpLayer, typename T>
+void computeKmerFrequency(std::vector<T>& localvector, MPI_Comm comm = MPI_COMM_WORLD)
 {
-  /*
-   * Approach:
-   * 1. Sort by Kmers, count and save the frequency in tmpLayer
-   * 2. Sort by readIdLayer, compute the median for each read
-   * 3. If median is above threshold, place MAX in tmpLayer
-   *    Else put readId in tmpLayer
-   * 4. Partition and delete trimmed reads
-   */
-
-  int p;
-  int rank;
-  MPI_Comm_size(comm, &p);
-  MPI_Comm_rank(comm, &rank);
-
   static layer_comparator<kmerLayer, T> kmerCmp;
-  static layer_comparator<readIdLayer, T> pcCmp;
-  static layer_comparator<tmpLayer, T> tmpCmp;
 
   auto start = localvector.begin();
   auto end = localvector.end();
@@ -114,14 +95,33 @@ void trimReadswithHighMedianOrMaxCoverage(std::vector<T>& localvector, std::vect
     auto innerLoopBound = findRange(rstart, rend, *rstart, kmerCmp);
     std::for_each(innerLoopBound.first, innerLoopBound.second, [rightBucketSize](T &t){ std::get<tmpLayer>(t) = rightBucketSize;});
   }
+}
 
-  //Step 1 completed
+/*
+ * @brief                         Assumes kmer frequency in the tmpLayer, filters the reads based on the abundance of their kmers
+ * @tparam[in] filterbyMedian     Filter if median exceeds "medianCutOff" in the Pc bucket
+ * @tparam[in] filterbyMax        Filter if maximum kmer frequence exceeds "frequencyCutOff" in the Pc bucket (which is a read during preprocessing)
+ */
+template <unsigned int tmpLayer, unsigned int readIdLayer, bool filterbyMedian, bool filterbyMax, uint8_t medianCutOff = 10, uint8_t frequencyCutOff = 50, typename T>
+void updateReadFilterFlags(std::vector<T>& localvector, std::vector<bool>& readFilterFlags, uint32_t firstReadId, MPI_Comm comm = MPI_COMM_WORLD)
+{
+  //Know my rank
+  int rank;
+  MPI_Comm_rank(comm, &rank);
+
+  //Custom comparators for tuples inside localvector
+  static layer_comparator<readIdLayer, T> pcCmp;
+  static layer_comparator<tmpLayer, T> tmpCmp;
+
+  auto start = localvector.begin();
+  auto end = localvector.end();
+
   //Need to sort the data by readId and compute the medians
+  mxx::sort(start, end, pcCmp, comm, false); 
+
 
   //Since the partitioning size haven't been modified yet, the partitions shouldn't spawn 
   //across processors
-  mxx::sort(start, end, pcCmp, comm, false); 
-
 
   //Track count of kmers removed
   uint64_t localElementsRemoved = 0;
@@ -134,20 +134,38 @@ void trimReadswithHighMedianOrMaxCoverage(std::vector<T>& localvector, std::vect
     std::nth_element(innerLoopBound.first, innerLoopBound.first + std::distance(innerLoopBound.first, innerLoopBound.second)/2, innerLoopBound.second, tmpCmp);
     auto currentMedian = *(innerLoopBound.first + std::distance(innerLoopBound.first, innerLoopBound.second)/2);
 
-    //Compute the max 
+    //Compute the max
     auto currentMax = *std::max_element(innerLoopBound.first, innerLoopBound.second, tmpCmp);
 
-    //Restore tmpLayer
     std::for_each(innerLoopBound.first, innerLoopBound.second, [](T &t){ std::get<tmpLayer>(t) = std::get<readIdLayer>(t);});
 
+    //Read id
+    auto readId = std::get<readIdLayer>(*innerLoopBound.first);
+
     //Either mark the tuples as removed or restore their tmpLayer
-    if(std::get<tmpLayer>(currentMedian) > medianCutOff || std::get<tmpLayer>(currentMax) > frequencyCutOff) 
+    if(filterbyMedian && std::get<tmpLayer>(currentMedian) > medianCutOff) 
     {
-      readFilterFlags.push_back(false);
+      readFilterFlags[readId - firstReadId] = false;
       localElementsRemoved += 1;
+
+      //Mark the flag inside tuple to delete later
+      std::for_each(innerLoopBound.first, innerLoopBound.second, [](T &t){ std::get<tmpLayer>(t) = MAX;});
+    }
+    else if(filterbyMax &&  std::get<tmpLayer>(currentMax) > frequencyCutOff)
+    {
+      readFilterFlags[readId - firstReadId] = false;
+      localElementsRemoved += 1;
+
+      //Mark the flag inside tuple to delete later
+      std::for_each(innerLoopBound.first, innerLoopBound.second, [](T &t){ std::get<tmpLayer>(t) = MAX;});
     }
     else
-      readFilterFlags.push_back(true);
+    {
+      readFilterFlags[readId - firstReadId] = true;
+
+      //Restore tmpLayer
+      std::for_each(innerLoopBound.first, innerLoopBound.second, [](T &t){ std::get<tmpLayer>(t) = std::get<readIdLayer>(t);});
+    }
 
     it = innerLoopBound.second;
   }
@@ -155,7 +173,53 @@ void trimReadswithHighMedianOrMaxCoverage(std::vector<T>& localvector, std::vect
   //Count the reads filtered
   auto totalReadsRemoved = mxx::reduce(localElementsRemoved);
 
-  if(!rank) std::cerr << "[PREPROCESS: Digital Norm] " << totalReadsRemoved << " reads removed from dataset\n"; 
+  if(!rank) std::cerr << "[PREPROCESS: ] " << totalReadsRemoved << " reads removed from dataset\n"; 
+
+}
+
+/*
+ * @brief                         Compute median coverage of kmers in a read. Discard the read if it is greater than "medianCutOff".
+ *                                This process has been referred as digital normalization.
+ *                                After completing the above step, this function also trims off read 
+ *                                if there is any kmer with coverage more than "frequencyCutOff"
+ * @param[out] readFilterFlags    Recall every process parses reads. If a rank parses say 10 reads, 
+ *                                readFilterFlags is bool vector of size 10, and is marked as false if read should be discarded
+ */
+template <unsigned int kmerLayer, unsigned int tmpLayer, unsigned int readIdLayer, typename T>
+void trimReadswithHighMedianOrMaxCoverage(std::vector<T>& localvector, std::vector<bool>& readFilterFlags, MPI_Comm comm = MPI_COMM_WORLD)
+{
+  /*
+   * Approach:
+   * 1. Sort by Kmers, count and save the frequency in tmpLayer
+   * 2. Sort by readIdLayer, compute the median for each read
+   * 3. If median is above threshold, place MAX in tmpLayer
+   *    Else put readId in tmpLayer
+   * 4. Partition and delete trimmed reads
+   */
+
+  //How many reads this processor has parsed while building the index
+  auto lastReadId = std::get<readIdLayer>(localvector.back());
+  auto firstReadId = std::get<readIdLayer>(localvector.front());
+
+  //Preserve the size of readFilterFlags based on the above count
+  readFilterFlags.resize(lastReadId - firstReadId + 1);
+
+  //Compute kmer frequency
+  computeKmerFrequency<kmerLayer, tmpLayer>(localvector); 
+
+  //Perform the digital normalization
+  updateReadFilterFlags<tmpLayer, readIdLayer, true, false>(localvector, readFilterFlags, firstReadId);
+
+  //Remove the marked reads from the working dataset
+  BoundaryKmerPredicate<tmpLayer, T> readFilterPredicate;
+  auto k_end = std::partition(localvector.begin(), localvector.end(), readFilterPredicate);
+  localvector.erase(k_end, localvector.end());
+
+  //Re-compute kmer frequency after trimming reads during digital normalization
+  computeKmerFrequency<kmerLayer, tmpLayer>(localvector); 
+
+  //Filter out only low abundant kmers
+  updateReadFilterFlags<tmpLayer, readIdLayer, false, true>(localvector, readFilterFlags, firstReadId);
 }
 
 #endif
