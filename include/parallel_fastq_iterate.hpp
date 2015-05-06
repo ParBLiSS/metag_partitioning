@@ -13,6 +13,7 @@
 #include <common/kmer_iterators.hpp>
 #include <common/base_types.hpp>
 #include <iterators/transform_iterator.hpp>
+#include <utils/kmer_utils.hpp>
 
 //Own includes
 
@@ -123,10 +124,20 @@ void generateReadKmerVector(const std::string &filename,
         // NOTE: need to call *start to actually evaluate.  question is whether ++ should be doing computation.
         for (; start != end; ++start)
         {
-          //Make tuple
-          //getPrefix() on kmer gives a 64-bit prefix for hashing assuming 
+          //New tuple that goes inside the vector
           T tupleToInsert;
-          std::get<0>(tupleToInsert) = (*start).getPrefix();
+
+          //Current kmer
+          auto originalKmer = *start;
+
+          //Get the reverse complement
+          auto reversedKmer = (*start).reverse_complement();
+
+          //Choose the minimum of two to insert in the vector
+          auto KmerToinsert = (originalKmer < reversedKmer) ? originalKmer : reversedKmer;
+
+          //getPrefix() on kmer gives a 64-bit prefix for hashing 
+          std::get<0>(tupleToInsert) = (KmerToinsert).getPrefix();
           std::get<1>(tupleToInsert) = readId;
           std::get<2>(tupleToInsert) = readId;
 
