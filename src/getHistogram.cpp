@@ -49,7 +49,7 @@ int main(int argc, char** argv)
    * PREPROCESSING PHASE
    */
   //Specify Kmer Type
-  const int kmerLength_pre = 20;
+  const int kmerLength_pre = 21;
   typedef bliss::common::DNA AlphabetType;
   typedef bliss::common::Kmer<kmerLength_pre, AlphabetType, uint64_t> KmerType_pre;
 
