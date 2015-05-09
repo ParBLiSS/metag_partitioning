@@ -102,7 +102,7 @@ void computeKmerFrequency(std::vector<T>& localvector, MPI_Comm comm = MPI_COMM_
  * @tparam[in] filterbyMedian     Filter if median exceeds "medianCutOff" in the Pc bucket
  * @tparam[in] filterbyMax        Filter if maximum kmer frequence exceeds "frequencyCutOff" in the Pc bucket (which is a read during preprocessing)
  */
-template <unsigned int tmpLayer, unsigned int readIdLayer, bool filterbyMedian, bool filterbyMax, uint8_t medianCutOff = 10, uint8_t frequencyCutOff = 50, typename T>
+template <unsigned int tmpLayer, unsigned int readIdLayer, bool filterbyMedian, bool filterbyMax, uint8_t medianCutOff = HIST_EQ_THRESHOLD, uint8_t frequencyCutOff = KMER_FREQ_THRESHOLD, typename T>
 void updateReadFilterFlags(std::vector<T>& localvector, std::vector<bool>& readFilterFlags, uint32_t firstReadId, MPI_Comm comm = MPI_COMM_WORLD)
 {
   //Know my rank
@@ -185,7 +185,7 @@ void updateReadFilterFlags(std::vector<T>& localvector, std::vector<bool>& readF
  * @param[out] readFilterFlags    Recall every process parses reads. If a rank parses say 10 reads, 
  *                                readFilterFlags is bool vector of size 10, and is marked as false if read should be discarded
  */
-template <unsigned int kmerLayer, unsigned int tmpLayer, unsigned int readIdLayer, typename T>
+template <typename T, unsigned int kmerLayer = 0, unsigned int tmpLayer = 1, unsigned int readIdLayer = 2>
 void trimReadswithHighMedianOrMaxCoverage(std::vector<T>& localvector, std::vector<bool>& readFilterFlags, MPI_Comm comm = MPI_COMM_WORLD)
 {
   /*

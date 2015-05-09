@@ -7,6 +7,7 @@
 #include <common/base_types.hpp>
 
 //Own includes
+#include "configParam.hpp"
 #include "sortTuples.hpp"
 #include "parallel_fastq_iterate.hpp"
 #include "utils.hpp"
@@ -49,15 +50,12 @@ int main(int argc, char** argv)
    * PREPROCESSING PHASE
    */
   //Specify Kmer Type
-  const int kmerLength_pre = 21;
+  const int kmerLength_pre = KMER_LEN_PRE;
   typedef bliss::common::DNA AlphabetType;
   typedef bliss::common::Kmer<kmerLength_pre, AlphabetType, uint64_t> KmerType_pre;
 
   //Assuming kmer-length is less than 32
   typedef uint64_t KmerIdType;
-
-  //Assuming read count is less than 4 Billion
-  typedef uint32_t ReadIdType;
 
   typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType> tuple_t;
 
@@ -66,11 +64,11 @@ int main(int argc, char** argv)
   std::vector<bool> readFilterFlags;
 
   //Generate kmer tuples, keep filter off
-  generateReadKmerVector<KmerType_pre, AlphabetType, ReadIdType, false> (filename, localVector, readFilterFlags, MPI_COMM_WORLD);
+  readFASTQFile< KmerType_pre, AlphabetType, includeAllKmers<KmerType_pre> > (filename, localVector, readFilterFlags);
 
   //Pre-process
   MP_TIMER_START();
-  trimReadswithHighMedianOrMaxCoverage<0,1,2>(localVector, readFilterFlags);
+  trimReadswithHighMedianOrMaxCoverage<>(localVector, readFilterFlags);
   MP_TIMER_END_SECTION("Digital normalization completed");
 
   //Delete the local vector
@@ -78,20 +76,21 @@ int main(int argc, char** argv)
   
 
   //Specify Kmer Type
-  const int kmerLength = 31;
+  const int kmerLength = KMER_LEN;
   typedef bliss::common::Kmer<kmerLength, AlphabetType, uint64_t> KmerType;
 
 
   // define k-mer and operator types
-  typedef KmerReduceAndMarkAsInactive<0, 2, 1, tuple_t> KmerReducerType;
-  typedef PartitionReduceAndMarkAsInactive<2, 1, tuple_t> PartitionReducerType;
-  ActivePartitionPredicate<1, tuple_t> app;
+  typedef KmerReduceAndMarkAsInactive<tuple_t> KmerReducerType;
+  typedef PartitionReduceAndMarkAsInactive<tuple_t> PartitionReducerType;
+  ActivePartitionPredicate<tuple_t> app;
 
 
   mxx::timer t;
   double startTime = t.elapsed();
 
   /*
+   * IMPORTANT NOTE
    * Indices inside tuple will go like this:
    * 0 : KmerId
    * 1 : P_new
@@ -99,7 +98,7 @@ int main(int argc, char** argv)
    */
 
   // Populate localVector for each rank and return the vector with all the tuples
-  generateReadKmerVector<KmerType, AlphabetType, ReadIdType, true> (filename, localVector, readFilterFlags, MPI_COMM_WORLD);
+  readFASTQFile< KmerType, AlphabetType, includeAllKmersinFilteredReads<KmerType> > (filename, localVector, readFilterFlags);
   readFilterFlags.clear();
 
 
