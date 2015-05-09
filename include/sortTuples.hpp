@@ -334,8 +334,6 @@ void sortTuples(std::vector<T>& localVector, char& wasSortLayerUpdated = dummyBo
 
 }
 
-// TODO: performance optimization.
-const unsigned int MAX = std::numeric_limits<uint32_t>::max();
 
 
 /**
@@ -349,7 +347,7 @@ const unsigned int MAX = std::numeric_limits<uint32_t>::max();
  *
  *
  */
-template <uint8_t keyLayer, uint8_t reductionLayer, uint8_t resultLayer, typename T>
+template <typename T, uint8_t keyLayer = 0, uint8_t reductionLayer = 2, uint8_t resultLayer = 1>
 struct KmerReduceAndMarkAsInactive {
 
     static layer_comparator<keyLayer, T> keycomp;
@@ -492,7 +490,7 @@ struct KmerReduceAndMarkAsInactive {
  *
  *
  */
-template <uint8_t keyLayer, uint8_t reductionLayer, typename T>
+template <typename T, uint8_t keyLayer = 2, uint8_t reductionLayer = 1>
 struct PartitionReduceAndMarkAsInactive {
 
     layer_comparator<keyLayer, T> keycomp;
@@ -632,7 +630,7 @@ struct BoundaryKmerPredicate {
 
 
 /// partition predicate for active Pc.  all inactive partitions are move to the back of iterator.
-template<uint8_t activePartitionLayer, typename T>
+template<typename T, uint8_t activePartitionLayer = 1>
 struct ActivePartitionPredicate {
     bool operator()(const T& x) {
       return  std::get<activePartitionLayer>(x) < MAX;
@@ -723,7 +721,7 @@ bool checkTerminationAndUpdateIterator(typename std::vector<T>::iterator start, 
   {
     //MP_TIMER_START();
 
-    end = std::partition(start, end, ActivePartitionPredicate<terminationFlagLayer, T>());
+    end = std::partition(start, end, ActivePartitionPredicate<T, terminationFlagLayer>());
     s = std::distance(start, end);
 
     MPI_Allreduce(&s, &maxS, 1, mpi_dt, MPI_MAX, comm);
@@ -732,135 +730,6 @@ bool checkTerminationAndUpdateIterator(typename std::vector<T>::iterator start, 
 
   return maxS == 0;
 }
-
-#if 0
-template <uint8_t Pc, uint8_t Pn, typename Iterator>
-void BucketReduce(Iterator start, Iterator end, MPI_Comm comm = MPI_COMM_WORLD)
-{
-  typedef typename std::iterator_traits<Iterator>::value_type T;
-  layer_comparator<Pc, T> pccomp;
-  layer_comparator<Pn, T>  pncomp;
-
-  int p;
-  int rank;
-  MPI_Comm_size(comm, &p);
-  MPI_Comm_rank(comm, &rank);
-
-  std::vector<T> toSend;
-
-  // check if the range is empty
-  if (start == end) {
-    // participate in the gather, but nothing else
-    std::vector<T> toRecv = mxx::allgatherv(toSend, comm);
-    return;
-  }
-
-  toSend.resize(2);
-
-  T v = *start;
-  auto minPn = std::get<reductionLayer>(v);  // Pn
-
-  auto lastStart = start;
-  auto firstEnd = end;
-
-  auto innerLoopBound = findRange(start, end, *start, keycomp);  // search by Pc
-
-  // do reduction on all partition segments
-  for(auto it = start; it!= end;)
-  {
-    // if 1 of the tuples have been marked as inactive, the entire partition must be marked as inactive.
-    // should not get here.
-    assert(std::get<reductionLayer>(*it) < MAX);
-
-    // else active partition to update it.
-
-    // get the range with the first element's key value.
-    innerLoopBound = findRange(it, end, *it, keycomp); // get segment for Pc
-    assert(innerLoopBound.first == it);
-
-    // Scan this bucket and find the minimum
-    minPn = std::get<Pn>(*(std::min_element(innerLoopBound.first, innerLoopBound.second, pncomp)));  // get min Pn
-    assert(minPn == MAX-1 || minPn <= std::get<keyLayer>(*it));
-
-    if (innerLoopBound.first != start && innerLoopBound.second != end)  // middle
-    {
-      // can update directly.
-      // then update all entries in bucket
-      /*
-      if (minPn >= (MAX - 1)) {
-        for (auto it2 = innerLoopBound.first; it2 != innerLoopBound.second; ++it2)
-          // if partition has only internal kmers, then this partition is to become inactive..
-          std::get<reductionLayer>(*it2) = MAX;
-      } else {
-        for (auto it2 = innerLoopBound.first; it2 != innerLoopBound.second; ++it2)
-          std::get<keyLayer>(*it2) = minPn;  // new partition id.
-      }
-      */
-
-    }
-
-    if (innerLoopBound.first == start) // first
-    {
-      // save the first entry
-      firstEnd = innerLoopBound.second;
-      std::get<keyLayer>(toSend[0]) = std::get<keyLayer>(*(innerLoopBound.first));
-      std::get<reductionLayer>(toSend[0]) = minPn;
-    }
-
-    if (innerLoopBound.second == end)  // last
-    {
-      // save the last entry (actually, first entry in the bucket.
-      lastStart = innerLoopBound.first;
-      std::get<keyLayer>(toSend[1]) = std::get<keyLayer>(*(innerLoopBound.first));
-      std::get<reductionLayer>(toSend[1]) = minPn;
-    }
-
-    it =  innerLoopBound.second;
-
-  }
-
-
-  // global gather of the boundary elements
-  std::vector<T> toRecv = mxx::allgatherv(toSend, comm);
-
-  // first group in local.
-  innerLoopBound = std::equal_range(toRecv.begin(), toRecv.end(), toSend[0], keycomp);
-  minPn = std::get<reductionLayer>(*(std::min_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
-
-  // if all kmers in partition are internal, then the partition is marked inactive.
-  // can update directly.
-  // then update all entries in bucket
-  if (minPn >= (MAX - 1)) {
-    for(auto it2 = start; it2 != firstEnd; ++it2)
-      // if partition has only internal kmers, then this partition is to become inactive..
-      std::get<reductionLayer>(*it2) = MAX;
-  }
-  else
-  {
-    for(auto it2 = start; it2 != firstEnd; ++it2)
-      std::get<keyLayer>(*it2) = minPn;  // new partition id.
-  }
-
-  // last group in localvector
-  if (std::get<keyLayer>(toSend[0]) != std::get<keyLayer>(toSend[1])) {
-    innerLoopBound = std::equal_range(innerLoopBound.second, toRecv.end(), toSend[1], keycomp);
-    minPn = std::get<reductionLayer>(*(std::min_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
-
-    // if all kmers in partition are internal, then the partition is marked inactive.
-    if (minPn >= (MAX - 1)) {
-      for(auto it2 = lastStart; it2 != end; ++it2)
-        // if partition has only internal kmers, then this partition is to become inactive..
-        std::get<reductionLayer>(*it2) =  MAX;
-    }
-    else
-    {
-      for(auto it2 = lastStart; it2 != end; ++it2)
-        std::get<keyLayer>(*it2) = minPn;  // new partition id.
-    }
-
-  }
-}
-#endif
 
 
 #endif
