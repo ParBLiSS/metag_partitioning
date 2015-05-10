@@ -12,6 +12,7 @@
 #include "parallel_fastq_iterate.hpp"
 #include "utils.hpp"
 #include "preProcess.hpp"
+#include "postProcess.hpp"
 
 #include <mxx/collective.hpp>
 #include <mxx/distribution.hpp>
@@ -64,7 +65,7 @@ int main(int argc, char** argv)
   std::vector<bool> readFilterFlags;
 
   //Generate kmer tuples, keep filter off
-  readFASTQFile< KmerType_pre, AlphabetType, includeAllKmers<KmerType_pre> > (filename, localVector, readFilterFlags);
+  readFASTQFile< KmerType_pre, includeAllKmers<KmerType_pre> > (filename, localVector, readFilterFlags);
 
   //Pre-process
   MP_TIMER_START();
@@ -98,7 +99,7 @@ int main(int argc, char** argv)
    */
 
   // Populate localVector for each rank and return the vector with all the tuples
-  readFASTQFile< KmerType, AlphabetType, includeAllKmersinFilteredReads<KmerType> > (filename, localVector, readFilterFlags);
+  readFASTQFile< KmerType, includeAllKmersinFilteredReads<KmerType> > (filename, localVector, readFilterFlags);
   readFilterFlags.clear();
 
 
@@ -164,6 +165,10 @@ int main(int argc, char** argv)
   }
 
   generatePartitionSizeHistogram<2>(localVector, histFileName);
+
+
+  finalPostProcessing<KmerType>(localVector, readFilterFlags, filename);
+
   MPI_Finalize();
   return(0);
 }
