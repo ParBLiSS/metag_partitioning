@@ -35,7 +35,7 @@
  * @param[out] localVector        Reference of vector to populate
  * @note                          This function should be called by all MPI ranks
  */
-template <typename KmerType, typename Alphabet, typename typeOfReadingOperation, typename T>
+template <typename KmerType, typename typeOfReadingOperation, typename T>
 void readFASTQFile(const std::string &filename,
                         std::vector<T>& localVector,
                         std::vector<bool>& readFilterFlags,
@@ -55,6 +55,9 @@ void readFASTQFile(const std::string &filename,
 
   /// DEFINE the transform iterator type for parsing the FASTQ file into sequence records.
   using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+
+  //Get the Alphabet type
+  using Alphabet = typename KmerType::KmerAlphabet;
 
   /// converter from ascii to alphabet values
   using BaseCharIterator = bliss::iterator::transform_iterator<typename SeqType::IteratorType, bliss::common::ASCII2<Alphabet> >;
@@ -292,6 +295,83 @@ struct includeAllKmersinFilteredReads
         //Update Pn and Pc
         std::get<PnLayer>(eachTuple) = std::get<PnLayer>(eachTuple) + previousReadIdSum;
         std::get<PcLayer>(eachTuple) = std::get<PnLayer>(eachTuple);
+      }
+    }
+  }
+};
+
+/*
+ * Generate a vector of tuples(kmer, Pn, Pc) from FASTQ file for each MPI process
+ * Ignore the reads which are discarded during preProcess stage
+ * Each Pn and Pc should by initialized with readIds
+ */
+template <typename KmerType, uint8_t kmerLayer=0, uint8_t PnLayer=1, uint8_t PcLayer=2>
+struct includeFirstKmersinFilteredReads
+{
+  //Reserve space in the vector
+  template <typename T>
+  void reserveSpace(std::vector<T>& localVector, size_t num_kmers, size_t num_reads)
+  {
+    localVector.reserve(num_reads);
+  }
+
+  //Fill values in the localVector
+  template <typename T, typename BaseCharIterator>
+  void fillValuesfromReads(std::vector<T>& localVector, BaseCharIterator charStart, BaseCharIterator charEnd, std::vector<bool>& readFilterFlags, ReadIdType readId)
+  {
+    /// kmer generation iterator
+    using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
+
+    //== set up the kmer generating iterators.
+    KmerIterType start(charStart, true);
+    KmerIterType end(charEnd, false);
+
+    //Either the filter switch is off or if its own, flag should be true
+    if(readFilterFlags[readId] == true)
+    {
+      //New tuple that goes inside the vector
+      T tupleToInsert;
+
+      //Current kmer
+      auto originalKmer = *start;
+
+      //Get the reverse complement
+      auto reversedKmer = (*start).reverse_complement();
+
+      //Choose the minimum of two to insert in the vector
+      auto KmerToinsert = (originalKmer < reversedKmer) ? originalKmer : reversedKmer;
+
+      //getPrefix() on kmer gives a 64-bit prefix for hashing 
+      std::get<kmerLayer>(tupleToInsert) = (KmerToinsert).getPrefix();
+      std::get<PnLayer>(tupleToInsert) = MAX;
+      std::get<PcLayer>(tupleToInsert) = readId;
+
+      //Insert tuple to vector
+      localVector.push_back(tupleToInsert);
+    }
+  }
+
+  //Maintain the global order of Ids across all MPI ranks
+  template <typename T>
+  void globalUniquenessOfIds(std::vector<T>& localVector, ReadIdType localReadCount, MPI_Comm comm)
+  {
+    int rank;
+    MPI_Comm_rank(comm, &rank);
+
+    ReadIdType previousReadIdSum;
+
+    //Get MPI Datatype using mxx library
+    mxx::datatype<ReadIdType> MPI_ReadIDType;
+    MPI_Exscan(&localReadCount, &previousReadIdSum, 1, MPI_ReadIDType.type(), MPI_SUM, comm);
+
+
+    //Update all elements
+    if(rank > 0)
+    {
+      for ( auto& eachTuple : localVector) 
+      {
+        //Update Pc only
+        std::get<PcLayer>(eachTuple) = std::get<PcLayer>(eachTuple) + previousReadIdSum;
       }
     }
   }

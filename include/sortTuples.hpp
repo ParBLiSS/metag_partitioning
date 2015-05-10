@@ -238,7 +238,7 @@ void sortTuples(std::vector<T>& localVector, char& wasSortLayerUpdated = dummyBo
   MPI_Barrier(comm);
 
   /***
-   * NOW WE DEAL WITH STUPID BOUNDARY VALUES  - TODO: use ALL REDUCE
+   * NOW WE DEAL WITH BOUNDARY VALUES  
    **/
 
   //Since the buckets could be partitioned across processors, we need to do some more work
