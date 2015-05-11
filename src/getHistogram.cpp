@@ -118,19 +118,17 @@ int main(int argc, char** argv)
   while (keepGoing) {
 
     // sort by k-mers and update Pn
-    mxx::sort(start, pend, layer_comparator<0, tuple_t>(), MPI_COMM_WORLD, true);
+    mxx::sort(start, pend, layer_comparator<kmerTuple::kmer, tuple_t>(), MPI_COMM_WORLD, true);
     KmerReducerType r1;
     r1(start, pend, MPI_COMM_WORLD);
-    //sortAndReduceTuples<0, KmerReducerType, tuple_t> (start, pend, MPI_COMM_WORLD);
 
     // sort by P_c and update P_c via P_n
-    mxx::sort(start, pend, layer_comparator<2, tuple_t>(), MPI_COMM_WORLD, true);
+    mxx::sort(start, pend, layer_comparator<kmerTuple::Pc, tuple_t>(), MPI_COMM_WORLD, true);
     PartitionReducerType r2;
     r2(start, pend, MPI_COMM_WORLD);
-    //sortAndReduceTuples<2, PartitionReducerType, tuple_t> (start, pend, MPI_COMM_WORLD);
 
     // check for global termination
-    keepGoing = !checkTermination<1, tuple_t>(start, pend, MPI_COMM_WORLD);
+    keepGoing = !checkTermination<kmerTuple::Pn, tuple_t>(start, pend, MPI_COMM_WORLD);
 
     if (keepGoing) {
       // now reduce to only working with active partitions
