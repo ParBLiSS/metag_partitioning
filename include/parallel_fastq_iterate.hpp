@@ -17,6 +17,7 @@
 
 //Own includes
 #include "configParam.hpp"
+#include "packedRead.hpp"
 
 //Includes from mxx library
 #include <mxx/datatypes.hpp>
@@ -145,7 +146,7 @@ void readFASTQFile(const std::string &filename,
  * Uses the tuples within  all the reads in the FASTQ file
  * Each Pn and Pc should by initialized with readIds
  */
-template <typename KmerType, uint8_t kmerLayer=0, uint8_t PnLayer=1, uint8_t PcLayer=2>
+template <typename KmerType>
 struct includeAllKmers
 {
   //Reserve space in the vector
@@ -182,9 +183,9 @@ struct includeAllKmers
       auto KmerToinsert = (originalKmer < reversedKmer) ? originalKmer : reversedKmer;
 
       //getPrefix() on kmer gives a 64-bit prefix for hashing 
-      std::get<kmerLayer>(tupleToInsert) = (KmerToinsert).getPrefix();
-      std::get<PnLayer>(tupleToInsert) = readId;
-      std::get<PcLayer>(tupleToInsert) = readId;
+      std::get<kmerTuple::kmer>(tupleToInsert) = (KmerToinsert).getPrefix();
+      std::get<kmerTuple::Pn>(tupleToInsert) = readId;
+      std::get<kmerTuple::Pc>(tupleToInsert) = readId;
 
       //Insert tuple to vector
       localVector.push_back(tupleToInsert);
@@ -211,8 +212,8 @@ struct includeAllKmers
       for ( auto& eachTuple : localVector) 
       {
         //Update Pn and Pc
-        std::get<PnLayer>(eachTuple) = std::get<PnLayer>(eachTuple) + previousReadIdSum;
-        std::get<PcLayer>(eachTuple) = std::get<PnLayer>(eachTuple);
+        std::get<kmerTuple::Pn>(eachTuple) = std::get<kmerTuple::Pn>(eachTuple) + previousReadIdSum;
+        std::get<kmerTuple::Pc>(eachTuple) = std::get<kmerTuple::Pn>(eachTuple);
       }
     }
   }
@@ -224,7 +225,7 @@ struct includeAllKmers
  * Ignore the reads which are discarded during preProcess stage
  * Each Pn and Pc should by initialized with readIds
  */
-template <typename KmerType, uint8_t kmerLayer=0, uint8_t PnLayer=1, uint8_t PcLayer=2>
+template <typename KmerType>
 struct includeAllKmersinFilteredReads
 {
   //Reserve space in the vector
@@ -263,9 +264,9 @@ struct includeAllKmersinFilteredReads
         auto KmerToinsert = (originalKmer < reversedKmer) ? originalKmer : reversedKmer;
 
         //getPrefix() on kmer gives a 64-bit prefix for hashing 
-        std::get<kmerLayer>(tupleToInsert) = (KmerToinsert).getPrefix();
-        std::get<PnLayer>(tupleToInsert) = readId;
-        std::get<PcLayer>(tupleToInsert) = readId;
+        std::get<kmerTuple::kmer>(tupleToInsert) = (KmerToinsert).getPrefix();
+        std::get<kmerTuple::Pn>(tupleToInsert) = readId;
+        std::get<kmerTuple::Pc>(tupleToInsert) = readId;
 
         //Insert tuple to vector
         localVector.push_back(tupleToInsert);
@@ -293,8 +294,8 @@ struct includeAllKmersinFilteredReads
       for ( auto& eachTuple : localVector) 
       {
         //Update Pn and Pc
-        std::get<PnLayer>(eachTuple) = std::get<PnLayer>(eachTuple) + previousReadIdSum;
-        std::get<PcLayer>(eachTuple) = std::get<PnLayer>(eachTuple);
+        std::get<kmerTuple::Pn>(eachTuple) = std::get<kmerTuple::Pn>(eachTuple) + previousReadIdSum;
+        std::get<kmerTuple::Pc>(eachTuple) = std::get<kmerTuple::Pn>(eachTuple);
       }
     }
   }
@@ -305,7 +306,7 @@ struct includeAllKmersinFilteredReads
  * Ignore the reads which are discarded during preProcess stage
  * Each Pn and Pc should by initialized with readIds
  */
-template <typename KmerType, uint8_t kmerLayer=0, uint8_t PnLayer=1, uint8_t PcLayer=2>
+template <typename KmerType>
 struct includeFirstKmersinFilteredReads
 {
   //Reserve space in the vector
@@ -342,9 +343,9 @@ struct includeFirstKmersinFilteredReads
       auto KmerToinsert = (originalKmer < reversedKmer) ? originalKmer : reversedKmer;
 
       //getPrefix() on kmer gives a 64-bit prefix for hashing 
-      std::get<kmerLayer>(tupleToInsert) = (KmerToinsert).getPrefix();
-      std::get<PnLayer>(tupleToInsert) = MAX;
-      std::get<PcLayer>(tupleToInsert) = readId;
+      std::get<kmerTuple::kmer>(tupleToInsert) = (KmerToinsert).getPrefix();
+      std::get<kmerTuple::Pn>(tupleToInsert) = MAX;
+      std::get<kmerTuple::Pc>(tupleToInsert) = readId;
 
       //Insert tuple to vector
       localVector.push_back(tupleToInsert);
@@ -371,10 +372,72 @@ struct includeFirstKmersinFilteredReads
       for ( auto& eachTuple : localVector) 
       {
         //Update Pc only
-        std::get<PcLayer>(eachTuple) = std::get<PcLayer>(eachTuple) + previousReadIdSum;
+        std::get<kmerTuple::Pc>(eachTuple) = std::get<kmerTuple::Pc>(eachTuple) + previousReadIdSum;
       }
     }
   }
+};
+
+template <typename KmerType>
+struct includeWholeReadinFilteredReads
+{
+  //Reserve space in the vector
+  template <typename Q>
+  void reserveSpace(std::vector<Q>& localVector, size_t num_kmers, size_t num_reads)
+  {
+    localVector.reserve(num_reads);
+  }
+
+  //Fill values in the localVector
+  template <typename Q, typename BaseCharIterator>
+  void fillValuesfromReads(std::vector<Q>& localVector, BaseCharIterator charStart, BaseCharIterator charEnd, std::vector<bool>& readFilterFlags, ReadIdType readId)
+  {
+    //Either the filter switch is off or if its own, flag should be true
+    if(readFilterFlags[readId] == true)
+    {
+      //New tuple that goes inside the vector
+      Q tupleToInsert;
+
+      //Get the read in packed format using the input iterators
+      typedef readStorageInfo <typename KmerType::KmerAlphabet, typename KmerType::KmerWordType> ReadInf;
+      getPackedRead<ReadInf>(std::get<readTuple::seq>(tupleToInsert), charStart, charEnd);
+
+      //Fill other values in the tupleToInsert
+      std::get<readTuple::rid>(tupleToInsert) = readId;
+      std::get<readTuple::pid>(tupleToInsert) = MAX;
+      std::get<readTuple::cnt>(tupleToInsert) = charEnd - charStart;
+
+      //Insert tuple to vector
+      localVector.push_back(tupleToInsert);
+    }
+  }
+
+  //Maintain the global order of Ids across all MPI ranks
+  template <typename Q>
+  void globalUniquenessOfIds(std::vector<Q>& localVector, ReadIdType localReadCount, MPI_Comm comm)
+  {
+    int rank;
+    MPI_Comm_rank(comm, &rank);
+
+    ReadIdType previousReadIdSum;
+
+    //Get MPI Datatype using mxx library
+    mxx::datatype<ReadIdType> MPI_ReadIDType;
+    MPI_Exscan(&localReadCount, &previousReadIdSum, 1, MPI_ReadIDType.type(), MPI_SUM, comm);
+
+
+    //Update all elements
+    if(rank > 0)
+    {
+      for ( auto& eachTuple : localVector) 
+      {
+        //Update Pc only
+        std::get<readTuple::rid>(eachTuple) = std::get<readTuple::rid>(eachTuple) + previousReadIdSum;
+      }
+    }
+  }
+
+
 };
 
 

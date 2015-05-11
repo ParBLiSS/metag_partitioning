@@ -69,23 +69,17 @@ inline void setBitsAtPos(std::array<T, N>& readPacked, WType w, int bitPos, int 
  * Note that InputIterator has value domain consistent with the valid values in the alphabet
  *
  * @param[out] readPacked       Read content stored inside this vector
- * @param[out] readCharCount    Count of characters present in the given read
  */
-template <typename InputIterator, typename ReadInf, typename T, std::size_t N>
-void getPackedRead(std::array<T, N>& readPacked, uint32_t& readCharCount, InputIterator start, InputIterator end)
+template <typename ReadInf, typename InputIterator, typename T, std::size_t N>
+void getPackedRead(std::array<T, N>& readPacked, InputIterator start, InputIterator end)
 {
-  //Assign the value to readPackedSize
-  readCharCount = end - start;
-
-  //Make sure readPackedSize is below 
-  assert(readCharCount <= ReadInf::maxCharCount);
-
   int bitPos = ReadInf::bitstream::nBits - ReadInf::bitsPerChar;
 
   for (auto iter = start; iter!=end ; bitPos -= ReadInf::bitsPerChar) 
   {
     //Insert the alphabet in the array
-    setBitsAtPos<ReadInf>(*iter, bitPos, ReadInf::bitsPerChar);
+    setBitsAtPos<ReadInf>(readPacked, *iter, bitPos, ReadInf::bitsPerChar);
+    ++iter;
   }
 }
 
