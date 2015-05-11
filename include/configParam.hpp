@@ -36,9 +36,16 @@ typedef uint32_t ReadIdType;
 const unsigned int MAX = std::numeric_limits<ReadIdType>::max();
 
 //Order of layers in kmer tuples (kmer, Pn, Pc)
-enum class kmerTuple {kmer,Pn,Pc};
+class kmerTuple {
+  public:
+    static const uint8_t kmer = 0, Pn = 1, Pc =2;
+};
 
 //Order of layers in read sequence tuples (Sequence, readid, partitionid, count of nuc. characters in the read)
-enum class readTuple{seq,rid,pid,cnt};
+class readTuple {
+  public:
+    static const uint8_t seq = 0, rid = 1, pid = 2, cnt = 3;
+};
+
 
 #endif
