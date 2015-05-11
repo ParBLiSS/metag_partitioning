@@ -39,7 +39,7 @@ void generateReadToPartitionMapping(const std::string& filename,
   localVector.insert(localVector.end(), localVector2.begin(), localVector2.end());
   localVector2.clear();
 
-  static layer_comparator<static_cast<uint8_t>(kmerTuple::kmer), T> kmerCmp;
+  static layer_comparator<kmerTuple::kmer, T> kmerCmp;
 
   //Sort by kmer Layer
   mxx::sort(localVector.begin(), localVector.end(), kmerCmp, comm, true); 
@@ -166,6 +166,8 @@ void generateReadToPartitionMapping(const std::string& filename,
       }
     }
 
+    //Move to next bucket
+    it = innerLoopBound.second;
   }
 }
 
