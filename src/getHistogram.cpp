@@ -164,6 +164,9 @@ int main(int argc, char** argv)
 
   generatePartitionSizeHistogram<2>(localVector, histFileName);
 
+  //Before beginning the post processing, we need to make sure Pn and Pc are equal for every tuple
+
+  std::for_each(localVector.begin(), localVector.end(), [](tuple_t &t){ std::get<kmerTuple::Pn>(t) = std::get<kmerTuple::Pc>(t);});
 
   finalPostProcessing<KmerType>(localVector, readFilterFlags, filename);
 

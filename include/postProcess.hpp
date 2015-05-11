@@ -99,7 +99,7 @@ void generateReadToPartitionMapping(const std::string& filename,
 
   for(auto it = localVector.begin(); it != localVector.end();)
   {
-    auto innerLoopBound = std::equal_range(it, localVector.end(), *it, kmerCmp);
+    auto innerLoopBound = findRange(it, localVector.end(), *it, kmerCmp);
     
     if (innerLoopBound.first == localVector.begin()) // first bucket
     {
@@ -179,7 +179,81 @@ void generateReadToPartitionMapping(const std::string& filename,
  *            3. Sort the vector by pid and write adjust the boundary so that no 2 partitions spawn across processors
  *            4. Convert this vector to a vector of vector of sequences belonging to the same partition
  */
-void generateSequencesVector();
+template <typename KmerType, typename Q> 
+void generateSequencesVector(const std::string& filename,
+                             std::vector<Q>& newLocalVector, std::vector<bool>& readFilterFlags,
+                             MPI_Comm comm = MPI_COMM_WORLD)
+{
+  int rank, p;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &p);
+
+  //temporary vector for appending reads (first kmers) to localVector
+  std::vector<Q> newLocalVector2;
+
+  //Parse the first kmers of each read and keep in localVector2
+  readFASTQFile< KmerType, includeWholeReadinFilteredReads<KmerType> > (filename, newLocalVector2, readFilterFlags);
+
+  //Paste all the values into original vector
+  newLocalVector.insert(newLocalVector.end(), newLocalVector2.begin(), newLocalVector2.end());
+  newLocalVector2.clear();
+
+  static layer_comparator<readTuple::rid, Q> ridCmp;
+
+  //Sort by read id Layer
+  mxx::sort(newLocalVector.begin(), newLocalVector.end(), ridCmp, comm, true); 
+
+  //Now each bucket will have only 2 elements, read tuple with pid and read tuple with sequence.
+  //Goal is to place the sequence in the tuple with correct pid and later remove tuples without pid
+  //Since a bucket could be spilled across processors, we will do a left shift of leftmost element, and push_back it to local vector
+  //Then each bucket is processed only when its size is 2
+
+  Q tupleToShift = newLocalVector.front();
+  Q tupleFromShift = mxx::left_shift(tupleToShift, comm);
+
+  //Last but one processor
+  if(rank < p - 1) 
+    newLocalVector.push_back(tupleFromShift);
+
+  //Start processing the buckets
+  for(auto it = newLocalVector.begin(); it != newLocalVector.end();)
+  {
+    auto innerLoopBound = findRange(it, newLocalVector.end(), *it, ridCmp);
+
+    if(innerLoopBound.second - innerLoopBound.first == 2)
+    {
+      //Get the pid from boundary tuple
+      auto findTupleWithSequence = *(std::find_if(innerLoopBound.first, innerLoopBound.second, 
+            [](const Q& x){
+            return (std::get<readTuple::pid>(x) == MAX);}));
+
+      auto findTupleWithPid = *(std::find_if(innerLoopBound.first, innerLoopBound.second,
+            [](const Q& x){
+            return (std::get<readTuple::cnt>(x) == 0);}));
+
+      //Update sequence and count
+      std::get<readTuple::seq>(findTupleWithPid) = std::get<readTuple::seq>(findTupleWithSequence);
+      std::get<readTuple::cnt>(findTupleWithPid) = std::get<readTuple::cnt>(findTupleWithSequence);
+
+    }
+    else
+    {
+      //This tuple is not needed, therefore should be removed later
+      std::get<readTuple::pid>(*innerLoopBound.first) = MAX;
+    }
+
+    //Move to next bucket
+    it = innerLoopBound.second;
+  }
+
+  //Now we can get rid of all the tuples who have pid as MAX
+  auto cend = std::partition(newLocalVector.begin(), newLocalVector.end(), 
+      [](const Q& x){
+      return std::get<readTuple::pid>(x) != MAX;});
+
+  newLocalVector.erase(cend, newLocalVector.end());
+
+}
 
 /*
  * @brief     With read sequences saved using vector of vector of strings, run parallel assembly using a assembler
@@ -209,6 +283,10 @@ void finalPostProcessing(std::vector<T>& localVector, std::vector<bool>& readFil
 
   //Get the newlocalVector populated with readId and partitionIds
   generateReadToPartitionMapping<KmerType>(filename, localVector, newlocalVector, readFilterFlags);
+
+  //Get the newlocalVector poulated with vector of vector of read strings belonging to the same partition
+  generateSequencesVector<KmerType>(filename, newlocalVector, readFilterFlags);
+
 }
 
 #endif
