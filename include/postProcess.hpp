@@ -42,6 +42,7 @@ void generateReadToPartitionMapping(const std::string& filename,
   static layer_comparator<kmerTuple::kmer, T> kmerCmp;
 
   //Sort by kmer Layer
+  mxx::block_decompose(localVector, comm);
   mxx::sort(localVector.begin(), localVector.end(), kmerCmp, comm, true); 
 
   //First resolve the first and last buckets
@@ -201,6 +202,7 @@ void generateSequencesVector(const std::string& filename,
   static layer_comparator<readTuple::rid, Q> ridCmp;
 
   //Sort by read id Layer
+  mxx::block_decompose(newLocalVector, comm);
   mxx::sort(newLocalVector.begin(), newLocalVector.end(), ridCmp, comm, true); 
 
   //Now each bucket will have only 2 elements, read tuple with pid and read tuple with sequence.
@@ -223,17 +225,17 @@ void generateSequencesVector(const std::string& filename,
     if(innerLoopBound.second - innerLoopBound.first == 2)
     {
       //Get the pid from boundary tuple
-      auto findTupleWithSequence = *(std::find_if(innerLoopBound.first, innerLoopBound.second, 
+      auto findTupleWithSequence = (std::find_if(innerLoopBound.first, innerLoopBound.second, 
             [](const Q& x){
             return (std::get<readTuple::pid>(x) == MAX);}));
 
-      auto findTupleWithPid = *(std::find_if(innerLoopBound.first, innerLoopBound.second,
+      auto findTupleWithPid = (std::find_if(innerLoopBound.first, innerLoopBound.second,
             [](const Q& x){
-            return (std::get<readTuple::cnt>(x) == 0);}));
+            return (std::get<readTuple::pid>(x) != MAX);}));
 
       //Update sequence and count
-      std::get<readTuple::seq>(findTupleWithPid) = std::get<readTuple::seq>(findTupleWithSequence);
-      std::get<readTuple::cnt>(findTupleWithPid) = std::get<readTuple::cnt>(findTupleWithSequence);
+      std::get<readTuple::seq>(*findTupleWithPid) = std::get<readTuple::seq>(*findTupleWithSequence);
+      std::get<readTuple::cnt>(*findTupleWithPid) = std::get<readTuple::cnt>(*findTupleWithSequence);
 
     }
     else
@@ -252,6 +254,11 @@ void generateSequencesVector(const std::string& filename,
       return std::get<readTuple::pid>(x) != MAX;});
 
   newLocalVector.erase(cend, newLocalVector.end());
+
+  //Sort by partitionId to bring reads in same Pc adjacent
+  static layer_comparator<readTuple::pid, Q> pidCmp;
+  mxx::block_decompose(newLocalVector, comm);
+  mxx::sort(newLocalVector.begin(), newLocalVector.end(), pidCmp, comm, true); 
 
 }
 
