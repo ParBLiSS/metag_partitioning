@@ -4,3 +4,6 @@
 [submodule "ext/psac-copy"]
 	path = ext/psac-copy
 	url = git@github.gatech.edu:pflick3/psac-copy.git
+[submodule "ext/velvet"]
+	path = ext/velvet
+	url = https://github.com/dzerbino/velvet.git

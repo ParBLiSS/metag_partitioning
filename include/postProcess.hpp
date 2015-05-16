@@ -173,12 +173,12 @@ void generateReadToPartitionMapping(const std::string& filename,
 }
 
 /*
- * @brief     Given readid-pid as input, this generates vector of vector with sequences belonging to a single partition
+ * @brief     Given readid-pid as input, this generates vector of tuples with read string sequences and partition id
  * @details
- *            1. Parse all the unfiltered reads and append new tuples for them, with pid set to MAX in the beginning
- *            2. Sort the vector by readid, and assign pid to reads
- *            3. Sort the vector by pid and write adjust the boundary so that no 2 partitions spawn across processors
- *            4. Convert this vector to a vector of vector of sequences belonging to the same partition
+ *            1.  Parse all the read sequences and append new tuples for them, with pid set to MAX in the beginning
+ *            2.  Sort the vector by readid, and assign pid to reads by linear scan in each bucket
+ *            4.  Convert this vector to a vector having tuples with read sequences and correct pids. The vector should be
+ *                sorted by pid in the end
  */
 template <typename KmerType, typename Q> 
 void generateSequencesVector(const std::string& filename,
@@ -262,14 +262,140 @@ void generateSequencesVector(const std::string& filename,
 
 }
 
+struct AssemblyCommands
+{
+  int rank;
+  std::string filename_fasta, filename_contigs, outputDir,
+              cmd_create_dir, velvetExe1, velvetExe2,
+              backupContigs, resetVelvet, resetInput, resetOutput,
+              finalMerge;
+
+  //Constructor
+  AssemblyCommands(int rank_)
+  {
+    rank = rank_;
+    do_init();
+  }
+
+  void do_init()
+  {
+    //filename for writing read sequences
+    filename_fasta = "/tmp/reads_" + std::to_string(rank) + ".fasta";
+
+    //Velvet writes it output to a directory, contigs are saved in contigs.fa file
+    //Need to append those contigs in this rank's main contig file
+    filename_contigs = "/tmp/contigs_" + std::to_string(rank) + ".fasta";
+
+    //Output directory for this rank
+    outputDir = "/tmp/velvetOutput_" + std::to_string(rank);
+    cmd_create_dir = "mkdir -p " + outputDir;
+
+    //Executing assembler
+    velvetExe1 = "velveth " + outputDir + " " + std::to_string(KMER_LEN) + " -short " + filename_fasta + " ";
+    velvetExe2 = "velvetg " + outputDir + " ";
+
+    //Assembler's output in the contigs file
+    backupContigs = "cat " + outputDir + "/contigs.fa >> " + filename_contigs;
+
+    //Remove file/directory after every assemby run
+    resetVelvet = "rm -rf " + outputDir + "/*";
+    resetInput = "> " + filename_fasta;
+    resetOutput = "rm -rf /tmp/contigs_* ";
+
+    //Concatenate all the contigs to a single file
+    finalMerge = "cat /tmp/contigs_* > contigs.fa"; 
+  }
+};
+
 /*
- * @brief     With read sequences saved using vector of vector of strings, run parallel assembly using a assembler
+ * @brief     With read sequences and pids in the vector, run parallel assembly using a assembler
  * @details
  *            1. Iterate over the element of vectors and dump the reads belonging to same partition into fasta file
  *            2. Run assembler and append the contigs to a file local to this processor
  *            3. Merge all the contig files in the end
  */
-void runParallelAssembly();
+template <typename ReadInf, typename Q>
+void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_WORLD)
+{
+  int rank, p;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &p);
+
+  //Assuming localVector was sorted by pids in the previous step
+
+  //The role of this function is trivial, except that there might be partitions spawning
+  //across multiple ranks. To deal with this, we will handle end boundary partitions as special case
+  
+  //Comparator for computing a partition's range
+  static layer_comparator<readTuple::pid, Q> pidCmp;
+
+  AssemblyCommands R(rank);
+  //Clean things in case output already exists
+  int i;
+  i = std::system(R.resetVelvet.c_str());
+  i = std::system(R.resetOutput.c_str());
+  i = std::system(R.resetInput.c_str());
+
+  //If output directory doesn't exist, create one
+  i = std::system(R.cmd_create_dir.c_str());
+
+  //To write sequence to file
+  std::ofstream ofs;
+
+  for(auto it=localVector.begin(); it!=localVector.end(); )
+  {
+    auto innerLoopBound = findRange(it, localVector.end(), *it, pidCmp);
+    ofs.open(R.filename_fasta,std::ofstream::out);
+
+    bool runVelvet = false;
+
+    //If my rank is >0 and this is first partition, delay it
+    if(innerLoopBound.first == localVector.begin() && rank > 0)
+    {
+      //Handle this case later
+    }
+    //If this is last partition of any rank but the last one, coordinate with the right 
+    //neighbor rank while dealing with this
+    else if(innerLoopBound.second == localVector.end() && rank < p -1)
+    {
+
+    }
+    else if(innerLoopBound.second - innerLoopBound.first >= MIN_READ_COUNT_FOR_ASSEMBLY)
+    {
+      for(auto it2 = innerLoopBound.first; it2 != innerLoopBound.second; it2++)
+      {
+        std::string seqHeader = ">" + std::to_string(std::get<readTuple::rid>(*it2)); 
+        //std::string seqString(std::begin(std::get<readTuple::seq>(*it2)), std::end(std::get<readTuple::seq>(*it2)));
+        std::string seqString;
+        getUnPackedRead<ReadInf>(std::get<readTuple::seq>(*it2), std::get<readTuple::cnt>(*it2), seqString);
+
+        ofs << seqHeader << "\n" << seqString << "\n"; 
+      }
+      runVelvet = true;
+    }
+
+    ofs.close();
+
+    if(runVelvet)
+    {
+      i = std::system(R.velvetExe1.c_str());
+      i = std::system(R.velvetExe2.c_str());
+      i = std::system(R.backupContigs.c_str());
+      i = std::system(R.resetVelvet.c_str());
+      i = std::system(R.resetInput.c_str());
+    }
+
+    //Increment the loop variable
+    it = innerLoopBound.second;
+  }
+
+  MPI_Barrier(comm);
+  if(!rank)
+    i =  std::system(R.finalMerge.c_str());
+
+  //No-op
+  i = i;
+}
 
 //Wrapper for all the post processing functions
 template <typename KmerType,  typename T>
@@ -291,8 +417,11 @@ void finalPostProcessing(std::vector<T>& localVector, std::vector<bool>& readFil
   //Get the newlocalVector populated with readId and partitionIds
   generateReadToPartitionMapping<KmerType>(filename, localVector, newlocalVector, readFilterFlags);
 
-  //Get the newlocalVector poulated with vector of vector of read strings belonging to the same partition
+  //Get the newlocalVector poulated with vector of read strings and partition ids
   generateSequencesVector<KmerType>(filename, newlocalVector, readFilterFlags);
+
+  //Run parallel assembly
+  runParallelAssembly<ReadSeqTypeInfo>(newlocalVector);
 
 }
 
