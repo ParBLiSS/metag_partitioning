@@ -18,7 +18,11 @@ constexpr int KMER_LEN_PRE = 21;
 //For now, keep it <= 32
 constexpr int KMER_LEN = 31;
 
-//Maximum read size in the dataset
+//We will discard partitions with less than these many reads
+constexpr int MIN_READ_COUNT_FOR_ASSEMBLY = 5;
+
+//This parameter should be set to greater than or equal to 
+//the maximum read size expected in the dataset
 const unsigned int MAX_READ_SIZE=128;
 
 
