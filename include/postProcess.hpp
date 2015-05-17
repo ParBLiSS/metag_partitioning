@@ -300,10 +300,11 @@ struct AssemblyCommands
     //Remove file/directory after every assemby run
     resetVelvet = "rm -rf " + outputDir + "/*";
     resetInput = "> " + filename_fasta;
-    resetOutput = "rm -rf /tmp/contigs_* ";
+    resetOutput = "rm -rf /tmp/contigs_* contigs.fa";
 
     //Concatenate all the contigs to a single file
-    finalMerge = "cat /tmp/contigs_* > contigs.fa"; 
+    //Every rank should call this one by one
+    finalMerge = "cat " + filename_contigs +" >> contigs.fa"; 
   }
 };
 
@@ -390,8 +391,12 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
   }
 
   MPI_Barrier(comm);
-  if(!rank)
-    i =  std::system(R.finalMerge.c_str());
+  for(int I = 0; I < p; I++)
+  {
+    if(I == rank)
+      i =  std::system(R.finalMerge.c_str());
+    MPI_Barrier(comm);
+  }
 
   //No-op
   i = i;
