@@ -12,7 +12,7 @@ constexpr int HIST_EQ_THRESHOLD = 10;
 constexpr int KMER_FREQ_THRESHOLD = 50;
 
 //Kmer length during filtering phase
-constexpr int KMER_LEN_PRE = 21;
+constexpr int KMER_LEN_PRE = 20;
 
 //Kmer length during de Bruijn graph partitioning
 //For now, keep it <= 32
@@ -37,7 +37,11 @@ const unsigned int MAX_READ_SIZE=128;
 //NOTE: Not sure about the correctness at the moment if following type is changed
 typedef uint32_t ReadIdType;
 
+//Type definition for partition id
+typedef uint32_t PidType;
+
 const unsigned int MAX = std::numeric_limits<ReadIdType>::max();
+const unsigned int MAX_INT = std::numeric_limits<int>::max();
 
 //Order of layers in kmer tuples (kmer, Pn, Pc)
 class kmerTuple {
