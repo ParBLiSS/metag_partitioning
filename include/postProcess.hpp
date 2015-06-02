@@ -262,10 +262,14 @@ void generateSequencesVector(const std::string& filename,
 
 }
 
+/*
+ * @brief   A separate struct to initialize all the string commands needed to execute velvet assembler.
+ *          Final output contigs are saved in contigs.fa file 
+ */
 struct AssemblyCommands
 {
   int rank;
-  std::string filename_fasta, filename_contigs, outputDir,
+  std::string filename_fasta, filename_contigs, outputDir, sharedFolder,
               cmd_create_dir, velvetExe1, velvetExe2,
               backupContigs, resetVelvet, resetInput, resetOutput,
               finalMerge;
@@ -288,7 +292,10 @@ struct AssemblyCommands
 
     //Output directory for this rank
     outputDir = "/tmp/velvetOutput_" + std::to_string(rank);
-    cmd_create_dir = "mkdir -p " + outputDir;
+
+    //Shared folder to save reads in the boundary partition
+    sharedFolder = "tmpFolder";
+    cmd_create_dir = "mkdir -p " + outputDir + " " + sharedFolder;
 
     //Executing assembler
     velvetExe1 = "velveth " + outputDir + " " + std::to_string(KMER_LEN) + " -short " + filename_fasta + " ";
@@ -305,6 +312,16 @@ struct AssemblyCommands
     //Concatenate all the contigs to a single file
     //Every rank should call this one by one
     finalMerge = "cat " + filename_contigs +" >> contigs.fa"; 
+  }
+
+  std::string getBoundaryFastaFileName(int rankWhereToSendReads)
+  {
+    return sharedFolder + "/reads_" + std::to_string(rankWhereToSendReads) + "_" + std::to_string(rank);
+  }
+
+  std::string catBoundaryFiles(int rankOwner)
+  {
+    return "cat " + sharedFolder + "/reads_" + std::to_string(rankOwner) + "_* >> " + filename_fasta; 
   }
 };
 
@@ -340,8 +357,65 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
   //If output directory doesn't exist, create one
   i = std::system(R.cmd_create_dir.c_str());
 
+  /*
+   * NEED TO DO SOME WORK FOR RESOLVING BOUNDARY PARTITIONS
+   * 1. Partition that spans over more than 1 rank, we will assume the highest rank owns it
+   * 2. Let other ranks who don't own a partition write the reads to a separate file in sharedFolder
+   * 3. Rank which owns the partition would read the partitions and pipe them to its own read fasta file
+   */
+
+  //Ids for first and last partition this rank has
+  std::vector<PidType> boundaryPartitionIds(2);
+  boundaryPartitionIds[0] = std::get<readTuple::pid>(localVector.front());
+  boundaryPartitionIds[1] = std::get<readTuple::pid>(localVector.back());
+
+  auto allBoundaryPartitionIds = mxx::allgatherv(boundaryPartitionIds, comm);
+  
+  //Decide if I owe someone else my last partition
+  bool iShouldTransferLastPartition;
+  int rankToWhom = MAX_INT;
+  //IF : My last partition's Id matches with first partition's id of rank one higher to me
+  if(rank < p - 1 && (allBoundaryPartitionIds[2*rank + 1] == allBoundaryPartitionIds[2*(rank + 1)]) )
+  {
+    iShouldTransferLastPartition = true;
+
+    //Compute which rank to transfer 
+    auto partitionRange = std::equal_range(allBoundaryPartitionIds.begin(), allBoundaryPartitionIds.end(), allBoundaryPartitionIds[2*rank + 1]);
+    auto indexFromStartLastOccurence = std::distance(allBoundaryPartitionIds.begin(), partitionRange.second); 
+    rankToWhom = ((int)indexFromStartLastOccurence)/2;
+  }
+  else
+    iShouldTransferLastPartition = false;
+
+  //See if I own my first partition or not
+  bool iDontOwnPartitionFirstPartition;
+  //IF :  I have only 1 partition with me and it needs to be transferred to higher rank
+  if(allBoundaryPartitionIds[2*rank] == allBoundaryPartitionIds[2*rank + 1] && iShouldTransferLastPartition) 
+    iDontOwnPartitionFirstPartition = true;
+  else
+    iDontOwnPartitionFirstPartition = false;
+
   //To write sequence to file
   std::ofstream ofs;
+
+  //Save last partition to a file
+  if(iShouldTransferLastPartition)
+  {
+    auto innerLoopBound = findRange(localVector.rbegin(), localVector.rend(), localVector.back(), pidCmp);
+    ofs.open(R.getBoundaryFastaFileName(rankToWhom),std::ofstream::out);
+
+    for(auto it2 = innerLoopBound.first; it2 != innerLoopBound.second; it2++)
+    {
+      std::string seqHeader = ">" + std::to_string(std::get<readTuple::rid>(*it2)); 
+      std::string seqString;
+      getUnPackedRead<ReadInf>(std::get<readTuple::seq>(*it2), std::get<readTuple::cnt>(*it2), seqString);
+
+      ofs << seqHeader << "\n" << seqString << "\n"; 
+    }
+    ofs.close();
+  }
+
+  MPI_Barrier(comm);
 
   for(auto it=localVector.begin(); it!=localVector.end(); )
   {
@@ -350,26 +424,46 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
 
     bool runVelvet = false;
 
-    //If my rank is >0 and this is first partition, delay it
-    if(innerLoopBound.first == localVector.begin() && rank > 0)
+    //If this is first partition
+    if(innerLoopBound.first == localVector.begin())
     {
-      //Handle this case later
-    }
-    //If this is last partition of any rank but the last one, coordinate with the right 
-    //neighbor rank while dealing with this
-    else if(innerLoopBound.second == localVector.end() && rank < p -1)
-    {
+      if(iDontOwnPartitionFirstPartition == false && innerLoopBound.second - innerLoopBound.first >= MIN_READ_COUNT_FOR_ASSEMBLY)
+      {
+        for(auto it2 = innerLoopBound.first; it2 != innerLoopBound.second; it2++)
+        {
+          std::string seqHeader = ">" + std::to_string(std::get<readTuple::rid>(*it2)); 
+          std::string seqString;
+          getUnPackedRead<ReadInf>(std::get<readTuple::seq>(*it2), std::get<readTuple::cnt>(*it2), seqString);
+          ofs << seqHeader << "\n" << seqString << "\n"; 
+        }
 
+        runVelvet = true;
+      }
+    }
+    else if(innerLoopBound.second == localVector.end())
+    {
+      if(iShouldTransferLastPartition == false && innerLoopBound.second - innerLoopBound.first >= MIN_READ_COUNT_FOR_ASSEMBLY)
+      {  
+        for(auto it2 = innerLoopBound.first; it2 != innerLoopBound.second; it2++)
+        {
+          std::string seqHeader = ">" + std::to_string(std::get<readTuple::rid>(*it2)); 
+          std::string seqString;
+          getUnPackedRead<ReadInf>(std::get<readTuple::seq>(*it2), std::get<readTuple::cnt>(*it2), seqString);
+          ofs << seqHeader << "\n" << seqString << "\n"; 
+        }
+
+        //Get reads from other ranks
+        i = std::system(R.catBoundaryFiles(rankToWhom).c_str());
+        runVelvet = true;
+      }
     }
     else if(innerLoopBound.second - innerLoopBound.first >= MIN_READ_COUNT_FOR_ASSEMBLY)
     {
       for(auto it2 = innerLoopBound.first; it2 != innerLoopBound.second; it2++)
       {
         std::string seqHeader = ">" + std::to_string(std::get<readTuple::rid>(*it2)); 
-        //std::string seqString(std::begin(std::get<readTuple::seq>(*it2)), std::end(std::get<readTuple::seq>(*it2)));
         std::string seqString;
         getUnPackedRead<ReadInf>(std::get<readTuple::seq>(*it2), std::get<readTuple::cnt>(*it2), seqString);
-
         ofs << seqHeader << "\n" << seqString << "\n"; 
       }
       runVelvet = true;
