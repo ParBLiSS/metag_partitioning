@@ -271,7 +271,7 @@ struct AssemblyCommands
   int rank;
   std::string filename_fasta, filename_contigs, outputDir, sharedFolder,
               cmd_create_dir, velvetExe1, velvetExe2,
-              backupContigs, resetVelvet, resetInput, resetOutput,
+              backupContigs, resetVelvet, resetInput, resetOutput, resetSharedFolder,
               finalMerge;
 
   //Constructor
@@ -308,6 +308,7 @@ struct AssemblyCommands
     resetVelvet = "rm -rf " + outputDir + "/*";
     resetInput = "> " + filename_fasta;
     resetOutput = "rm -rf /tmp/contigs_* contigs.fa";
+    resetSharedFolder = "rm -rf " + sharedFolder;
 
     //Concatenate all the contigs to a single file
     //Every rank should call this one by one
@@ -491,6 +492,10 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
       i =  std::system(R.finalMerge.c_str());
     MPI_Barrier(comm);
   }
+
+
+  //Delete shared folder to keep next run correct
+  i = std::system(R.resetSharedFolder.c_str());
 
   //No-op
   i = i;
