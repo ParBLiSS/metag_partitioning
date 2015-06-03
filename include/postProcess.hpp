@@ -298,7 +298,7 @@ struct AssemblyCommands
     cmd_create_dir = "mkdir -p " + outputDir + " " + sharedFolder;
 
     //Executing assembler
-    velvetExe1 = "velveth " + outputDir + " " + std::to_string(KMER_LEN) + " -short " + filename_fasta + " ";
+    velvetExe1 = "velveth " + outputDir + " " + std::to_string(VELVET_KMER_LEN) + " -short " + filename_fasta + " ";
     velvetExe2 = "velvetg " + outputDir + " ";
 
     //Assembler's output in the contigs file
@@ -438,6 +438,8 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
           ofs << seqHeader << "\n" << seqString << "\n"; 
         }
 
+        //Get reads from other ranks
+        i = std::system(R.catBoundaryFiles(rank).c_str());
         runVelvet = true;
       }
     }
@@ -453,8 +455,6 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
           ofs << seqHeader << "\n" << seqString << "\n"; 
         }
 
-        //Get reads from other ranks
-        i = std::system(R.catBoundaryFiles(rankToWhom).c_str());
         runVelvet = true;
       }
     }
