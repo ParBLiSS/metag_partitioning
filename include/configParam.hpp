@@ -6,7 +6,7 @@
  */
 
 //Histogram equalization threshold
-constexpr int HIST_EQ_THRESHOLD = 10; 
+constexpr int HIST_EQ_THRESHOLD = 20; 
 
 //Controls the threshold for read filtering
 constexpr int KMER_FREQ_THRESHOLD = 50;
@@ -17,6 +17,9 @@ constexpr int KMER_LEN_PRE = 20;
 //Kmer length during de Bruijn graph partitioning
 //For now, keep it <= 32
 constexpr int KMER_LEN = 31;
+
+//Kmer length for assembly
+constexpr int VELVET_KMER_LEN = 45;
 
 //We will discard partitions with less than these many reads
 constexpr int MIN_READ_COUNT_FOR_ASSEMBLY = 5;
