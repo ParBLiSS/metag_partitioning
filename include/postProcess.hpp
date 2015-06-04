@@ -503,8 +503,12 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
 
 //Wrapper for all the post processing functions
 template <typename KmerType,  typename T>
-void finalPostProcessing(std::vector<T>& localVector, std::vector<bool>& readFilterFlags, const std::string& filename)
+void finalPostProcessing(std::vector<T>& localVector, std::vector<bool>& readFilterFlags, const std::string& filename,
+                        MPI_Comm comm = MPI_COMM_WORLD)
 {
+  int rank;
+  MPI_Comm_rank(comm, &rank);
+
   //Determining storage container for read sequences
   typedef readStorageInfo<typename KmerType::KmerAlphabet, typename KmerType::KmerWordType> ReadSeqTypeInfo; 
 
@@ -523,6 +527,11 @@ void finalPostProcessing(std::vector<T>& localVector, std::vector<bool>& readFil
 
   //Get the newlocalVector poulated with vector of read strings and partition ids
   generateSequencesVector<KmerType>(filename, newlocalVector, readFilterFlags);
+
+  //Logging the histogram of partition size in terms of reads
+  std::string histFileName = "partitionRead.hist";
+  if(!rank) std::cout << "Generating read histogram in file " << histFileName << "\n";
+  generatePartitionSizeHistogram<readTuple::pid>(newlocalVector, histFileName);
 
   //Run parallel assembly
   runParallelAssembly<ReadSeqTypeInfo>(newlocalVector);
