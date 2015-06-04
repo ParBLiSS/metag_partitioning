@@ -147,28 +147,36 @@ int main(int argc, char** argv)
   //Output all (Kmer, PartitionIds) to a file in sorted order by Kmer
   //Don't play with the 0, 2 order, this is assumed by outputCompare
   if(!rank) std::cout << "WARNING: write to file option enabled \n";
-  writeTuplesAll<0, 2, tuple_t>(localVector.begin(), localVector.end(), filename);
+  writeTuplesAll<kmerTuple::kmer, kmerTuple::Pc, tuple_t>(localVector.begin(), localVector.end(), filename);
 #endif
 
   double time = t.elapsed() - startTime;
 
-  std::string histFileName = filename;
-  histFileName += ".hist";
+  //Lets ensure Pn and Pc are equal for every tuple
+  //This was not ensured during the program run
+  std::for_each(localVector.begin(), localVector.end(), [](tuple_t &t){ std::get<kmerTuple::Pn>(t) = std::get<kmerTuple::Pc>(t);});
+
+
+  std::string histFileName = "partitionKmer.hist";
 
   if(!rank)
   {
     std::cout << "Algorithm took " << countIterations << " iteration.\n";
-    std::cout << "TOTAL TIME : " << time << " ms.\n"; 
-    std::cout << "Generating histogram in file " << histFileName << "\n";
+    std::cout << "PARTITIONING TOTAL TIME : " << time << " ms.\n"; 
+    std::cout << "Generating kmer histogram in file " << histFileName << "\n";
   }
 
-  generatePartitionSizeHistogram<2>(localVector, histFileName);
-
-  //Before beginning the post processing, we need to make sure Pn and Pc are equal for every tuple
-
-  std::for_each(localVector.begin(), localVector.end(), [](tuple_t &t){ std::get<kmerTuple::Pn>(t) = std::get<kmerTuple::Pc>(t);});
+  generatePartitionSizeHistogram<kmerTuple::Pc>(localVector, histFileName);
 
   finalPostProcessing<KmerType>(localVector, readFilterFlags, filename);
+
+  MPI_Barrier(MPI_COMM_WORLD);
+
+  if(!rank)
+  {
+    time = t.elapsed() - startTime;
+    std::cout << "TOTAL TIME : " << time << " ms.\n"; 
+  }
 
   MPI_Finalize();
   return(0);
