@@ -28,6 +28,11 @@ constexpr int MIN_READ_COUNT_FOR_ASSEMBLY = 5;
 //the maximum read size expected in the dataset
 const unsigned int MAX_READ_SIZE=128;
 
+//Important paths
+//Local disk space on each node for velvet (Multiple writes and reads)
+const std::string localFS = "/local/scratch/cjain7/";
+//Shared space for communicating reads across ranks (Only one time write and read)
+const std::string sharedFS = "/lustre/alurugroup/Chirag/Metagenome_Data/Mock/Trash/"; 
 
 
 
