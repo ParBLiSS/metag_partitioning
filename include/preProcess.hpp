@@ -137,6 +137,7 @@ void updateReadFilterFlags(std::vector<T>& localvector, std::vector<bool>& readF
     //Compute the max
     auto currentMax = *std::max_element(innerLoopBound.first, innerLoopBound.second, tmpCmp);
 
+    //Restore read id in the tmpLayer back
     std::for_each(innerLoopBound.first, innerLoopBound.second, [](T &t){ std::get<tmpLayer>(t) = std::get<readIdLayer>(t);});
 
     //Read id
@@ -216,6 +217,7 @@ void trimReadswithHighMedianOrMaxCoverage(std::vector<T>& localvector, std::vect
   localvector.erase(k_end, localvector.end());
 
   //Re-compute kmer frequency after trimming reads during digital normalization
+  //No need for a barrier at this point
   computeKmerFrequency<kmerLayer, tmpLayer>(localvector); 
 
   //Filter out only low abundant kmers
