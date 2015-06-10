@@ -382,7 +382,7 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
 
     //Compute which rank to transfer 
     auto partitionRange = std::equal_range(allBoundaryPartitionIds.begin(), allBoundaryPartitionIds.end(), allBoundaryPartitionIds[2*rank + 1]);
-    auto indexFromStartLastOccurence = std::distance(allBoundaryPartitionIds.begin(), partitionRange.second); 
+    auto indexFromStartLastOccurence = std::distance(allBoundaryPartitionIds.begin(), partitionRange.second) - 1; 
     rankToWhom = ((int)indexFromStartLastOccurence)/2;
   }
   else
@@ -499,7 +499,8 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
 
 
   //Delete shared folder to keep next run correct
-  i = std::system(R.resetSharedFolder.c_str());
+  //Important otherwise files may corrupt future runs
+  if(!rank) i = std::system(R.resetSharedFolder.c_str());
 
   //No-op
   i = i;
