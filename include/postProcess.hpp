@@ -263,15 +263,41 @@ void generateSequencesVector(const std::string& filename,
 }
 
 /*
+ * @brief                         At the moment, partition with smaller ids tend to be larger.
+ *                                To resolve this issue, partition ids are shuffled using XOR function
+ * @param[in/out] localVector     Accepts vector which is block decomposed, and returns the vector sorted
+ *            
+ */
+template <typename Q> 
+void shuffleAndResortPids(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_WORLD)
+{
+  std::for_each(localVector.begin(), localVector.end(), 
+      [](Q &t){ 
+          //Source : http://stackoverflow.com/questions/664014/what-integer-hash-function-are-good-that-accepts-an-integer-hash-key
+          PidType x = std::get<readTuple::pid>(t);
+          x = ((x >> 16) ^ x) * 0x45d9f3b;
+          x = ((x >> 16) ^ x) * 0x45d9f3b;
+          x = ((x >> 16) ^ x);
+          std::get<readTuple::pid>(t) = x;
+      });
+
+  //Sort by partitionId to bring reads in same Pc adjacent
+  static layer_comparator<readTuple::pid, Q> pidCmp;
+  mxx::sort(localVector.begin(), localVector.end(), pidCmp, comm, true);
+}
+
+/*
  * @brief   A separate struct to initialize all the string commands needed to execute velvet assembler.
- *          Final output contigs are saved in contigs.fa file 
+ *          Final output contigs are saved in the contigs.fa file 
  */
 struct AssemblyCommands
 {
   int rank;
   std::string filename_fasta, filename_contigs, outputDir, sharedFolder,
               cmd_create_dir, velvetExe1, velvetExe2,
-              backupContigs, resetVelvet, resetInput, resetOutput, resetSharedFolder,
+              backupContigs, 
+              resetVelvet, resetInput, resetOutput, resetSharedFolder,
+              resetContigTmps,
               finalMerge;
 
   //Constructor
@@ -307,7 +333,8 @@ struct AssemblyCommands
     //Remove file/directory after every assemby run
     resetVelvet = "rm -rf " + outputDir + "/*";
     resetInput = "> " + filename_fasta;
-    resetOutput = "rm -rf /tmp/contigs_* contigs.fa";
+    resetContigTmps = "> " + filename_contigs;
+    resetOutput = "rm -rf contigs.fa";
     resetSharedFolder = "rm -rf " + sharedFolder;
 
     //Concatenate all the contigs to a single file
@@ -322,12 +349,13 @@ struct AssemblyCommands
 
   std::string catBoundaryFiles(int rankOwner)
   {
-    return "cat " + sharedFolder + "/reads_" + std::to_string(rankOwner) + "_* >> " + filename_fasta; 
+    std::string files = sharedFolder + "/reads_" + std::to_string(rankOwner) + "_*";
+    return "if ls " + files + " 1> /dev/null 2>&1 ; then cat " + files + " >> " + filename_fasta + "; fi ;"; 
   }
 };
 
 /*
- * @brief     With read sequences and pids in the vector, run parallel assembly using a assembler
+ * @brief     With read sequences and pids in the vector (sorted by pid), run parallel assembly using a assembler
  * @details
  *            1. Iterate over the element of vectors and dump the reads belonging to same partition into fasta file
  *            2. Run assembler and append the contigs to a file local to this processor
@@ -339,6 +367,9 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
   int rank, p;
   MPI_Comm_rank(comm, &rank);
   MPI_Comm_size(comm, &p);
+
+  //Timer to see balance of assembly load among the ranks
+  MP_TIMER_START();
 
   //Assuming localVector was sorted by pids in the previous step
 
@@ -352,8 +383,10 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
   //Clean things in case output already exists
   int i;
   i = std::system(R.resetVelvet.c_str());
-  i = std::system(R.resetOutput.c_str());
   i = std::system(R.resetInput.c_str());
+  i = std::system(R.resetContigTmps.c_str());
+  if(!rank) i = std::system(R.resetOutput.c_str());
+  if(!rank) i = std::system(R.resetSharedFolder.c_str());
 
   //If output directory doesn't exist, create one
   i = std::system(R.cmd_create_dir.c_str());
@@ -417,6 +450,7 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
   }
 
   //All boundary partitions should be ready in the file system before moving ahead
+  MP_TIMER_END_SECTION("[ASSEMBLY TIMER] Boundary partitions ready on disk");
   MPI_Barrier(comm);
 
   for(auto it=localVector.begin(); it!=localVector.end(); )
@@ -487,6 +521,7 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
     it = innerLoopBound.second;
   }
 
+  MP_TIMER_END_SECTION("[ASSEMBLY TIMER] Parallel assembly completed");
   MPI_Barrier(comm);
   for(int I = 0; I < p; I++)
   {
@@ -528,18 +563,26 @@ void finalPostProcessing(std::vector<T>& localVector, std::vector<bool>& readFil
   std::vector<tuple_t> newlocalVector;
 
   //Get the newlocalVector populated with readId and partitionIds
+  MP_TIMER_START();
   generateReadToPartitionMapping<KmerType>(filename, localVector, newlocalVector, readFilterFlags);
+  MP_TIMER_END_SECTION("[POSTPROCESS TIMER] ReadId-Pid mapping completed");
 
   //Get the newlocalVector poulated with vector of read strings and partition ids
   generateSequencesVector<KmerType>(filename, newlocalVector, readFilterFlags);
+  MP_TIMER_END_SECTION("[POSTPROCESS TIMER] ReadStrings-Pid mapping completed");
 
   //Logging the histogram of partition size in terms of reads
   std::string histFileName = "partitionRead.hist";
   if(!rank) std::cout << "Generating read histogram in file " << histFileName << "\n";
   generatePartitionSizeHistogram<readTuple::pid>(newlocalVector, histFileName);
+  MP_TIMER_END_SECTION("[POSTPROCESS TIMER] Read sized partition histogram generated");
+
+  shuffleAndResortPids(newlocalVector);
+  MP_TIMER_END_SECTION("[POSTPROCESS TIMER] Partition ids shuffled");
 
   //Run parallel assembly
   runParallelAssembly<ReadSeqTypeInfo>(newlocalVector);
+  MP_TIMER_END_SECTION("[POSTPROCESS TIMER] Parallel assembly completed");
 
 }
 

@@ -63,5 +63,16 @@ class readTuple {
     static const uint8_t seq = 0, rid = 1, pid = 2, cnt = 3;
 };
 
+/*
+ * MXX TIMER
+ */
+#define MP_ENABLE_TIMER 1
+#if MP_ENABLE_TIMER
+#define MP_TIMER_START() mxx::section_timer timer;
+#define MP_TIMER_END_SECTION(str) timer.end_section(str);
+#else
+#define MP_TIMER_START()
+#define MP_TIMER_END_SECTION(str)
+#endif
 
 #endif

@@ -65,10 +65,11 @@ int main(int argc, char** argv)
   std::vector<bool> readFilterFlags;
 
   //Generate kmer tuples, keep filter off
+  MP_TIMER_START();
   readFASTQFile< KmerType_pre, includeAllKmers<KmerType_pre> > (filename, localVector, readFilterFlags);
+  MP_TIMER_END_SECTION("File read for pre-process");
 
   //Pre-process
-  MP_TIMER_START();
   trimReadswithHighMedianOrMaxCoverage<>(localVector, readFilterFlags);
   MP_TIMER_END_SECTION("Digital normalization completed");
 
@@ -87,9 +88,6 @@ int main(int argc, char** argv)
   ActivePartitionPredicate<tuple_t> app;
 
 
-  mxx::timer t;
-  double startTime = t.elapsed();
-
   /*
    * IMPORTANT NOTE
    * Indices inside tuple will go like this:
@@ -100,6 +98,7 @@ int main(int argc, char** argv)
 
   // Populate localVector for each rank and return the vector with all the tuples
   readFASTQFile< KmerType, includeAllKmersinFilteredReads<KmerType> > (filename, localVector, readFilterFlags);
+  MP_TIMER_END_SECTION("File read for partitioning");
   readFilterFlags.clear();
 
 
@@ -115,7 +114,7 @@ int main(int argc, char** argv)
   //Sort tuples by KmerId
   bool keepGoing = true;
   int countIterations = 0;
-  while (keepGoing) {
+  while (keepGoing && countIterations < 8) {
 
     // sort by k-mers and update Pn
     mxx::sort(start, pend, layer_comparator<kmerTuple::kmer, tuple_t>(), MPI_COMM_WORLD, true);
@@ -142,16 +141,6 @@ int main(int argc, char** argv)
       std::cout << "[RANK 0] : Iteration # " << countIterations <<"\n";
   }
 
-
-#if OUTPUTTOFILE
-  //Output all (Kmer, PartitionIds) to a file in sorted order by Kmer
-  //Don't play with the 0, 2 order, this is assumed by outputCompare
-  if(!rank) std::cout << "WARNING: write to file option enabled \n";
-  writeTuplesAll<kmerTuple::kmer, kmerTuple::Pc, tuple_t>(localVector.begin(), localVector.end(), filename);
-#endif
-
-  double time = t.elapsed() - startTime;
-
   //Lets ensure Pn and Pc are equal for every tuple
   //This was not ensured during the program run
   std::for_each(localVector.begin(), localVector.end(), [](tuple_t &t){ std::get<kmerTuple::Pn>(t) = std::get<kmerTuple::Pc>(t);});
@@ -162,21 +151,18 @@ int main(int argc, char** argv)
   if(!rank)
   {
     std::cout << "Algorithm took " << countIterations << " iteration.\n";
-    std::cout << "PARTITIONING TOTAL TIME : " << time << " ms.\n"; 
     std::cout << "Generating kmer histogram in file " << histFileName << "\n";
   }
+  MP_TIMER_END_SECTION("Partitioning completed");
 
   generatePartitionSizeHistogram<kmerTuple::Pc>(localVector, histFileName);
+
+  MP_TIMER_END_SECTION("Kmer Partition size histogram generated");
 
   finalPostProcessing<KmerType>(localVector, readFilterFlags, filename);
 
   MPI_Barrier(MPI_COMM_WORLD);
-
-  if(!rank)
-  {
-    time = t.elapsed() - startTime;
-    std::cout << "TOTAL TIME : " << time << " ms.\n"; 
-  }
+  MP_TIMER_END_SECTION("Program finished execution");
 
   MPI_Finalize();
   return(0);
