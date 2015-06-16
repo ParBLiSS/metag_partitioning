@@ -11,25 +11,13 @@
 
 //Own includes
 #include "prettyprint.hpp"
+#include "configParam.hpp"
 
 #include <fstream>
 #include <iostream>
 
 
 static char dummyBool;
-
-#define MP_ENABLE_TIMER 1
-#if MP_ENABLE_TIMER
-#define MP_TIMER_START() mxx::section_timer timer;
-#define MP_TIMER_END_SECTION(str) timer.end_section(str);
-#else
-#define MP_TIMER_START()
-#define MP_TIMER_END_SECTION(str)
-#endif
-
-//To output all the kmers and their respective partitionIds
-//Switch on while testing
-#define OUTPUTTOFILE 0
 
 
 //Custom comparator for tuples

@@ -13,17 +13,104 @@
 /*
  * @brief                         Computes and saves the frequency of each kmer in the tmpLayer
  *                                Does a sort by kmerLayer to do the counting
+ *                                In each bucket, the frequency is marekd as '1 2 ... totalCount' 
+ *                                This is done to mimic progressive histogram equalization as done in khmer
  * @Note                          Don't change the local partition size during global sorts
  */
-template <unsigned int kmerLayer, unsigned int tmpLayer, typename T>
-void computeKmerFrequency(std::vector<T>& localvector, MPI_Comm comm = MPI_COMM_WORLD)
+template <unsigned int kmerLayer, unsigned int tmpLayer, unsigned int readIdLayer, typename T>
+void computeKmerFrequencyIncreasing(std::vector<T>& localvector, MPI_Comm comm = MPI_COMM_WORLD)
 {
+  //Know my rank
+  int rank;
+  MPI_Comm_rank(comm, &rank);
+
   static layer_comparator<kmerLayer, T> kmerCmp;
 
   auto start = localvector.begin();
   auto end = localvector.end();
-  auto rstart = localvector.rbegin();
-  auto rend = localvector.rend();
+
+  //Sort by kmer, read id
+  mxx::sort(start, end, 
+            [](const T& x, const T&y){
+            return (std::get<kmerLayer>(x) < std::get<kmerLayer>(y)
+                        || (std::get<kmerLayer>(x) == std::get<kmerLayer>(y)
+                                    && std::get<readIdLayer>(x) < std::get<readIdLayer>(y)));
+                    },
+            comm, false); 
+
+
+  //Keep frequency for leftmost and rightmost kmers seperately
+  //Tuples of KmerId and count
+  using tupleType = std::tuple<uint64_t, uint64_t>;
+  std::vector<tupleType> toSend(2);
+   
+  for(auto it = start; it!= end;)  // iterate over all segments.
+  {
+    auto innerLoopBound = findRange(it, end, *it, kmerCmp);
+
+    //Leftmost bucket, appends information for sending to other ranks
+    if(innerLoopBound.first == start)
+    {
+      std::get<0>(toSend[0]) = std::get<kmerLayer>(*start);
+      std::get<1>(toSend[0]) = (innerLoopBound.second - innerLoopBound.first);
+    }
+    //Rightmost bucket
+    else if(innerLoopBound.second == end)
+    {
+      std::get<0>(toSend[1]) = std::get<kmerLayer>(*innerLoopBound.first);
+      std::get<1>(toSend[1]) = innerLoopBound.second - innerLoopBound.first;
+
+      for(auto it1 = innerLoopBound.first; it1 != innerLoopBound.second; it1++)
+        std::get<tmpLayer>(*it1) = std::distance(innerLoopBound.first, it1) + 1;
+    }
+    else
+    {
+      //Mark frequency as 1,2...totalCount
+      for(auto it1 = innerLoopBound.first; it1 != innerLoopBound.second; it1++)
+        std::get<tmpLayer>(*it1) = std::distance(innerLoopBound.first, it1) + 1;
+    }
+
+    it = innerLoopBound.second;
+  }
+
+  auto allBoundaryKmers = mxx::allgather_vectors(toSend);
+
+  static layer_comparator<0, tupleType> gatherCmp;
+
+  //Left boundary case
+  //Count size only on the left side of this rank
+  auto leftBucketBoundaryRange = std::equal_range(allBoundaryKmers.begin(), allBoundaryKmers.begin() + 2*rank, toSend[0], gatherCmp);
+
+  uint64_t leftBucketSize = 0;
+  for(auto it = leftBucketBoundaryRange.first; it != leftBucketBoundaryRange.second; it++)
+  {
+    leftBucketSize += std::get<1>(*it);
+  }
+
+  {
+    //Update leftmost bucket
+    auto innerLoopBound = findRange(start, end, *start, kmerCmp);
+    for(auto it = innerLoopBound.first; it != innerLoopBound.second; it ++)
+      std::get<tmpLayer>(*it) = leftBucketSize + (std::distance(innerLoopBound.first, it) + 1);
+  }
+}
+
+/*
+ * @brief                         Computes and saves the frequency of each kmer in the tmpLayer
+ *                                Does a sort by kmerLayer to do the counting
+ *                                In each bucket, the frequency is marekd as 'totalCount totalCount ... totalCount' 
+ */
+template <unsigned int kmerLayer, unsigned int tmpLayer, typename T>
+void computeKmerFrequencyAbsolute(std::vector<T>& localvector, MPI_Comm comm = MPI_COMM_WORLD)
+{
+  //Know my rank
+  int rank;
+  MPI_Comm_rank(comm, &rank);
+
+  static layer_comparator<kmerLayer, T> kmerCmp;
+
+  auto start = localvector.begin();
+  auto end = localvector.end();
 
   //Sort by kmer id
   mxx::sort(start, end, kmerCmp, comm, false); 
@@ -38,7 +125,7 @@ void computeKmerFrequency(std::vector<T>& localvector, MPI_Comm comm = MPI_COMM_
   {
     auto innerLoopBound = findRange(it, end, *it, kmerCmp);
 
-    //Leftmost bucket
+    //Leftmost bucket, appends information for sending to other ranks
     if(innerLoopBound.first == start)
     {
       std::get<0>(toSend[0]) = std::get<kmerLayer>(*start);
@@ -48,10 +135,10 @@ void computeKmerFrequency(std::vector<T>& localvector, MPI_Comm comm = MPI_COMM_
     else if(innerLoopBound.second == end)
     {
       std::get<0>(toSend[1]) = std::get<kmerLayer>(*innerLoopBound.first);
+      std::get<1>(toSend[1]) = innerLoopBound.second - innerLoopBound.first;
 
-      //Corner case of having same kmer through out
-      if(std::get<kmerLayer>(*start) !=  std::get<kmerLayer>(*innerLoopBound.first))
-        std::get<1>(toSend[1]) = innerLoopBound.second - innerLoopBound.first;
+      uint64_t currentCount = innerLoopBound.second - innerLoopBound.first; 
+      std::for_each(innerLoopBound.first, innerLoopBound.second, [currentCount](T &t){ std::get<tmpLayer>(t) = currentCount;});
     }
     else
     {
@@ -67,6 +154,7 @@ void computeKmerFrequency(std::vector<T>& localvector, MPI_Comm comm = MPI_COMM_
   static layer_comparator<0, tupleType> gatherCmp;
 
   //Left boundary case
+  //Count size only on the left side of this rank
   auto leftBucketBoundaryRange = std::equal_range(allBoundaryKmers.begin(), allBoundaryKmers.end(), toSend[0], gatherCmp);
 
   uint64_t leftBucketSize = 0;
@@ -79,21 +167,6 @@ void computeKmerFrequency(std::vector<T>& localvector, MPI_Comm comm = MPI_COMM_
     //Update leftmost bucket
     auto innerLoopBound = findRange(start, end, *start, kmerCmp);
     std::for_each(innerLoopBound.first, innerLoopBound.second, [leftBucketSize](T &t){ std::get<tmpLayer>(t) = leftBucketSize;});
-  }
-
-  //Right boundary case
-  auto rightBucketBoundaryRange = std::equal_range(allBoundaryKmers.begin(), allBoundaryKmers.end(), toSend[1], gatherCmp);
- 
-  uint64_t rightBucketSize = 0;
-  for(auto it = rightBucketBoundaryRange.first; it!= rightBucketBoundaryRange.second; it++) 
-  {
-    rightBucketSize += std::get<1>(*it);
-  }
-
-  {
-    //Update rightmost bucket
-    auto innerLoopBound = findRange(rstart, rend, *rstart, kmerCmp);
-    std::for_each(innerLoopBound.first, innerLoopBound.second, [rightBucketSize](T &t){ std::get<tmpLayer>(t) = rightBucketSize;});
   }
 }
 
@@ -206,10 +279,13 @@ void trimReadswithHighMedianOrMaxCoverage(std::vector<T>& localvector, std::vect
   readFilterFlags.resize(lastReadId - firstReadId + 1);
 
   //Compute kmer frequency
-  computeKmerFrequency<kmerLayer, tmpLayer>(localvector); 
+  MP_TIMER_START();
+  computeKmerFrequencyIncreasing<kmerLayer, tmpLayer, readIdLayer>(localvector); 
+  MP_TIMER_END_SECTION("[PREPROCESS TIMER] First kmer counting pass completed");
 
   //Perform the digital normalization
   updateReadFilterFlags<tmpLayer, readIdLayer, true, false>(localvector, readFilterFlags, firstReadId);
+  MP_TIMER_END_SECTION("[PREPROCESS TIMER] Digi-Norm completed");
 
   //Remove the marked reads from the working dataset
   BoundaryKmerPredicate<tmpLayer, T> readFilterPredicate;
@@ -218,10 +294,12 @@ void trimReadswithHighMedianOrMaxCoverage(std::vector<T>& localvector, std::vect
 
   //Re-compute kmer frequency after trimming reads during digital normalization
   //No need for a barrier at this point
-  computeKmerFrequency<kmerLayer, tmpLayer>(localvector); 
+  computeKmerFrequencyAbsolute<kmerLayer, tmpLayer>(localvector); 
+  MP_TIMER_END_SECTION("[PREPROCESS TIMER] Second kmer counting pass completed");
 
   //Filter out only low abundant kmers
   updateReadFilterFlags<tmpLayer, readIdLayer, false, true>(localvector, readFilterFlags, firstReadId);
+  MP_TIMER_END_SECTION("[PREPROCESS TIMER] Filtering low abundant reads completed");
 }
 
 #endif
