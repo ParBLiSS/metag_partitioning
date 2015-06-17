@@ -37,7 +37,7 @@
  * @note                          This function should be called by all MPI ranks
  */
 template <typename KmerType, typename typeOfReadingOperation, typename T>
-void readFASTQFile(const std::string &filename,
+void readFASTQFile(     cmdLineParams &cmdLineVals,
                         std::vector<T>& localVector,
                         std::vector<bool>& readFilterFlags,
                         MPI_Comm comm = MPI_COMM_WORLD) 
@@ -68,7 +68,7 @@ void readFASTQFile(const std::string &filename,
   MPI_Comm_rank(comm, &rank);
 
   //==== create file Loader (single thread per MPI process)
-  FileLoaderType loader(comm, filename);  // this handle is alive through the entire building process.
+  FileLoaderType loader(comm, cmdLineVals.fileName);  // this handle is alive through the entire building process.
 
   //====  now process the file, one L1 block (block partition by MPI Rank) at a time
   typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();

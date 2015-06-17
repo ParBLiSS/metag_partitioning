@@ -18,9 +18,6 @@ constexpr int KMER_LEN_PRE = 20;
 //For now, keep it <= 32
 constexpr int KMER_LEN = 31;
 
-//Kmer length for assembly
-constexpr int VELVET_KMER_LEN = 45;
-
 //We will discard partitions with less than these many reads
 constexpr int MIN_READ_COUNT_FOR_ASSEMBLY = 5;
 
@@ -28,13 +25,14 @@ constexpr int MIN_READ_COUNT_FOR_ASSEMBLY = 5;
 //the maximum read size expected in the dataset
 const unsigned int MAX_READ_SIZE=128;
 
+//Iteration limit to stop partitioning early
+const int ITER_LIMIT = 8;
+
 //Important paths
 //Local disk space on each node for velvet (Multiple writes and reads)
 const std::string localFS = "/local/scratch/cjain7/";
 //Shared space for communicating reads across ranks (Only one time write and read)
 const std::string sharedFS = "/lustre/alurugroup/Chirag/Metagenome_Data/Mock/Trash/"; 
-
-
 
 
 /*
@@ -62,6 +60,17 @@ class readTuple {
   public:
     static const uint8_t seq = 0, rid = 1, pid = 2, cnt = 3;
 };
+
+//Struct to save command line options
+struct cmdLineParams {
+  //Fastq file containing the reads
+  std::string fileName;
+
+  //Kmer size to run Velvet
+  int velvetKmerSize;
+};
+
+
 
 /*
  * MXX TIMER

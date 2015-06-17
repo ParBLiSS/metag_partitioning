@@ -21,10 +21,10 @@
  *            4. delete the original localVector, and return the new tuples 
  */
 template <typename KmerType, typename T, typename Q>
-void generateReadToPartitionMapping(const std::string& filename, 
-                                  std::vector<T>& localVector, std::vector<Q>& newlocalVector, 
-                                  std::vector<bool>& readFilterFlags,
-                                  MPI_Comm comm = MPI_COMM_WORLD)
+void generateReadToPartitionMapping(  cmdLineParams& cmdLineVals,
+                                      std::vector<T>& localVector, std::vector<Q>& newlocalVector, 
+                                      std::vector<bool>& readFilterFlags,
+                                      MPI_Comm comm = MPI_COMM_WORLD)
 {
   int rank;
   MPI_Comm_rank(comm, &rank);
@@ -33,7 +33,7 @@ void generateReadToPartitionMapping(const std::string& filename,
   std::vector<T> localVector2;
 
   //Parse the first kmers of each read and keep in localVector2
-  readFASTQFile< KmerType, includeFirstKmersinFilteredReads<KmerType> > (filename, localVector2, readFilterFlags);
+  readFASTQFile< KmerType, includeFirstKmersinFilteredReads<KmerType> > (cmdLineVals, localVector2, readFilterFlags);
 
   //Paste all the values into original vector
   localVector.insert(localVector.end(), localVector2.begin(), localVector2.end());
@@ -181,7 +181,7 @@ void generateReadToPartitionMapping(const std::string& filename,
  *                sorted by pid in the end
  */
 template <typename KmerType, typename Q> 
-void generateSequencesVector(const std::string& filename,
+void generateSequencesVector(cmdLineParams& cmdLineVals,
                              std::vector<Q>& newLocalVector, std::vector<bool>& readFilterFlags,
                              MPI_Comm comm = MPI_COMM_WORLD)
 {
@@ -193,7 +193,7 @@ void generateSequencesVector(const std::string& filename,
   std::vector<Q> newLocalVector2;
 
   //Parse the first kmers of each read and keep in localVector2
-  readFASTQFile< KmerType, includeWholeReadinFilteredReads<KmerType> > (filename, newLocalVector2, readFilterFlags);
+  readFASTQFile< KmerType, includeWholeReadinFilteredReads<KmerType> > (cmdLineVals, newLocalVector2, readFilterFlags);
 
   //Paste all the values into original vector
   newLocalVector.insert(newLocalVector.end(), newLocalVector2.begin(), newLocalVector2.end());
@@ -301,13 +301,13 @@ struct AssemblyCommands
               finalMerge;
 
   //Constructor
-  AssemblyCommands(int rank_)
+  AssemblyCommands(int rank_, cmdLineParams &cmdLineVals)
   {
     rank = rank_;
-    do_init();
+    do_init(cmdLineVals);
   }
 
-  void do_init()
+  void do_init(cmdLineParams &cmdLineVals)
   {
     //filename for writing read sequences
     filename_fasta = localFS + "reads_" + std::to_string(rank) + ".fasta";
@@ -324,7 +324,7 @@ struct AssemblyCommands
     cmd_create_dir = "mkdir -p " + outputDir + " " + sharedFolder;
 
     //Executing assembler
-    velvetExe1 = "velveth " + outputDir + " " + std::to_string(VELVET_KMER_LEN) + " -short " + filename_fasta + " ";
+    velvetExe1 = "velveth " + outputDir + " "  + std::to_string(cmdLineVals.velvetKmerSize) +" -short " + filename_fasta + " ";
     velvetExe2 = "velvetg " + outputDir + " ";
 
     //Assembler's output in the contigs file
@@ -362,7 +362,7 @@ struct AssemblyCommands
  *            3. Merge all the contig files in the end
  */
 template <typename ReadInf, typename Q>
-void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_WORLD)
+void runParallelAssembly(std::vector<Q> &localVector, cmdLineParams &cmdLineVals, MPI_Comm comm = MPI_COMM_WORLD)
 {
   int rank, p;
   MPI_Comm_rank(comm, &rank);
@@ -379,7 +379,7 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
   //Comparator for computing a partition's range
   static layer_comparator<readTuple::pid, Q> pidCmp;
 
-  AssemblyCommands R(rank);
+  AssemblyCommands R(rank, cmdLineVals);
   //Clean things in case output already exists
   int i;
   i = std::system(R.resetVelvet.c_str());
@@ -543,7 +543,7 @@ void runParallelAssembly(std::vector<Q> &localVector, MPI_Comm comm = MPI_COMM_W
 
 //Wrapper for all the post processing functions
 template <typename KmerType,  typename T>
-void finalPostProcessing(std::vector<T>& localVector, std::vector<bool>& readFilterFlags, const std::string& filename,
+void finalPostProcessing(std::vector<T>& localVector, std::vector<bool>& readFilterFlags, cmdLineParams &cmdLineVals,
                         MPI_Comm comm = MPI_COMM_WORLD)
 {
   int rank;
@@ -564,11 +564,11 @@ void finalPostProcessing(std::vector<T>& localVector, std::vector<bool>& readFil
 
   //Get the newlocalVector populated with readId and partitionIds
   MP_TIMER_START();
-  generateReadToPartitionMapping<KmerType>(filename, localVector, newlocalVector, readFilterFlags);
+  generateReadToPartitionMapping<KmerType>(cmdLineVals, localVector, newlocalVector, readFilterFlags);
   MP_TIMER_END_SECTION("[POSTPROCESS TIMER] ReadId-Pid mapping completed");
 
   //Get the newlocalVector poulated with vector of read strings and partition ids
-  generateSequencesVector<KmerType>(filename, newlocalVector, readFilterFlags);
+  generateSequencesVector<KmerType>(cmdLineVals, newlocalVector, readFilterFlags);
   MP_TIMER_END_SECTION("[POSTPROCESS TIMER] ReadStrings-Pid mapping completed");
 
   //Logging the histogram of partition size in terms of reads
@@ -581,7 +581,7 @@ void finalPostProcessing(std::vector<T>& localVector, std::vector<bool>& readFil
   MP_TIMER_END_SECTION("[POSTPROCESS TIMER] Partition ids shuffled");
 
   //Run parallel assembly
-  runParallelAssembly<ReadSeqTypeInfo>(newlocalVector);
+  runParallelAssembly<ReadSeqTypeInfo>(newlocalVector, cmdLineVals);
   MP_TIMER_END_SECTION("[POSTPROCESS TIMER] Parallel assembly completed");
 
 }
