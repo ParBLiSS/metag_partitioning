@@ -13,6 +13,7 @@
 #include "utils.hpp"
 #include "preProcess.hpp"
 #include "postProcess.hpp"
+#include "argvparser.h"
 
 #include <mxx/collective.hpp>
 #include <mxx/distribution.hpp>
@@ -20,6 +21,8 @@
 
 #include <sstream>
 
+using namespace std;
+using namespace CommandLineProcessing;
 
 
 int main(int argc, char** argv)
@@ -27,24 +30,38 @@ int main(int argc, char** argv)
   // Initialize the MPI library:
   MPI_Init(&argc, &argv);
 
-  //Specify the fileName
-  std::string filename;
-  if( argc > 1 ) {
-    filename = argv[1];
-  }
-  else {
-    std::cout << "Usage: mpirun -np 4 <executable> FASTQ_FILE\n";
-    return 1;
-  }
-
   // get communicaiton parameters
   int rank, p;
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
   MPI_Comm_size(MPI_COMM_WORLD, &p);
 
+  //Parse command line arguments
+  ArgvParser cmd;
+  cmdLineParams cmdLineVals;
+
+  cmd.setIntroductoryDescription("Parallel metagenomic assembly software implemented by cjain7@gatech.edu");
+  cmd.setHelpOption("h", "help", "Print this help page");
+
+  cmd.defineOption("file", "Name of the dataset in the FASTQ format", ArgvParser::OptionRequiresValue | ArgvParser::OptionRequired);
+  cmd.defineOption("velvetK", "Kmer length to pass while running velvet", ArgvParser::OptionRequiresValue | ArgvParser::OptionRequired);
+
+  int result = cmd.parse(argc, argv);
+
+  if (result != ArgvParser::NoParserError)
+  {
+    if (!rank) cout << cmd.parseErrorDescription(result) << "\n";
+    exit(1);
+  }
+
+
+  cmdLineVals.fileName = cmd.optionValue("file");
+  cmdLineVals.velvetKmerSize = std::stoi(cmd.optionValue("velvetK")); 
+
+
   if(!rank) {
     std::cout << "Runnning with " << p << " processors.\n"; 
-    std::cout << "Filename : " <<  filename << "\n"; 
+    std::cout << "Filename : " <<  cmdLineVals.fileName << "\n"; 
+    std::cout << "Velvet kmer size : " << cmdLineVals.velvetKmerSize << "\n";
   }
 
   /*
@@ -66,7 +83,7 @@ int main(int argc, char** argv)
 
   //Generate kmer tuples, keep filter off
   MP_TIMER_START();
-  readFASTQFile< KmerType_pre, includeAllKmers<KmerType_pre> > (filename, localVector, readFilterFlags);
+  readFASTQFile< KmerType_pre, includeAllKmers<KmerType_pre> > (cmdLineVals, localVector, readFilterFlags);
   MP_TIMER_END_SECTION("File read for pre-process");
 
   //Pre-process
@@ -97,7 +114,7 @@ int main(int argc, char** argv)
    */
 
   // Populate localVector for each rank and return the vector with all the tuples
-  readFASTQFile< KmerType, includeAllKmersinFilteredReads<KmerType> > (filename, localVector, readFilterFlags);
+  readFASTQFile< KmerType, includeAllKmersinFilteredReads<KmerType> > (cmdLineVals, localVector, readFilterFlags);
   MP_TIMER_END_SECTION("File read for partitioning");
   readFilterFlags.clear();
 
@@ -114,7 +131,7 @@ int main(int argc, char** argv)
   //Sort tuples by KmerId
   bool keepGoing = true;
   int countIterations = 0;
-  while (keepGoing && countIterations < 8) {
+  while (keepGoing && countIterations < ITER_LIMIT) {
 
     // sort by k-mers and update Pn
     mxx::sort(start, pend, layer_comparator<kmerTuple::kmer, tuple_t>(), MPI_COMM_WORLD, true);
@@ -159,13 +176,11 @@ int main(int argc, char** argv)
 
   MP_TIMER_END_SECTION("Kmer Partition size histogram generated");
 
-  finalPostProcessing<KmerType>(localVector, readFilterFlags, filename);
+  finalPostProcessing<KmerType>(localVector, readFilterFlags, cmdLineVals);
 
   MPI_Barrier(MPI_COMM_WORLD);
-  MP_TIMER_END_SECTION("Program finished execution");
+  MP_TIMER_END_SECTION("Parallel assembly completed");
 
   MPI_Finalize();
   return(0);
 }
-
-
