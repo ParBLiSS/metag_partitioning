@@ -30,7 +30,7 @@ const int ITER_LIMIT = 8;
 
 //Important paths
 //Local disk space on each node for velvet (Multiple writes and reads)
-const std::string localFS = "/local/scratch/cjain7/";
+const std::string localFS = "$TMPDIR";
 //Shared space for communicating reads across ranks (Only one time write and read)
 const std::string sharedFS = "/lustre/alurugroup/Chirag/Metagenome_Data/Mock/Trash/"; 
 

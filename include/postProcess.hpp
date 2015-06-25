@@ -310,17 +310,17 @@ struct AssemblyCommands
   void do_init(cmdLineParams &cmdLineVals)
   {
     //filename for writing read sequences
-    filename_fasta = localFS + "reads_" + std::to_string(rank) + ".fasta";
+    filename_fasta = localFS + "/reads_" + std::to_string(rank) + ".fasta";
 
     //Velvet writes it output to a directory, contigs are saved in contigs.fa file
     //Need to append those contigs in this rank's main contig file
-    filename_contigs = localFS + "contigs_" + std::to_string(rank) + ".fasta";
+    filename_contigs = localFS + "/contigs_" + std::to_string(rank) + ".fasta";
 
     //Output directory for this rank
-    outputDir = localFS + "velvetOutput_" + std::to_string(rank);
+    outputDir = localFS + "/velvetOutput_" + std::to_string(rank);
 
     //Shared folder to save reads in the boundary partition
-    sharedFolder = sharedFS + "tmpFolder";
+    sharedFolder = sharedFS + "/tmpFolder";
     cmd_create_dir = "mkdir -p " + outputDir + " " + sharedFolder;
 
     //Executing assembler

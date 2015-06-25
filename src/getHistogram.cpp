@@ -45,6 +45,10 @@ int main(int argc, char** argv)
   cmd.defineOption("file", "Name of the dataset in the FASTQ format", ArgvParser::OptionRequiresValue | ArgvParser::OptionRequired);
   cmd.defineOption("velvetK", "Kmer length to pass while running velvet", ArgvParser::OptionRequiresValue | ArgvParser::OptionRequired);
 
+  //Global timer for calculating total time
+  mxx::timer t;
+  double startTime = t.elapsed();
+
   int result = cmd.parse(argc, argv);
 
   if (result != ArgvParser::NoParserError)
@@ -116,7 +120,6 @@ int main(int argc, char** argv)
   // Populate localVector for each rank and return the vector with all the tuples
   readFASTQFile< KmerType, includeAllKmersinFilteredReads<KmerType> > (cmdLineVals, localVector, readFilterFlags);
   MP_TIMER_END_SECTION("File read for partitioning");
-  readFilterFlags.clear();
 
 
   // re-distirbute vector into equal block partition
@@ -180,6 +183,12 @@ int main(int argc, char** argv)
 
   MPI_Barrier(MPI_COMM_WORLD);
   MP_TIMER_END_SECTION("Parallel assembly completed");
+
+  double time = t.elapsed() - startTime;
+  if(!rank)
+  {
+    std::cerr << "TOTAL time : " << time << " ms.\n";
+  }
 
   MPI_Finalize();
   return(0);
