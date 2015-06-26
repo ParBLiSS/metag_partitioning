@@ -6,53 +6,71 @@
  */
 
 //Histogram equalization threshold
+//Can be modified
 constexpr int HIST_EQ_THRESHOLD = 20; 
 
 //Controls the threshold for read filtering
+//Can be modified
 constexpr int KMER_FREQ_THRESHOLD = 50;
 
 //Kmer length during filtering phase
+//Keep it <= 32
 constexpr int KMER_LEN_PRE = 20;
 
 //Kmer length during de Bruijn graph partitioning
-//For now, keep it <= 32
+//Keep it <= 32
 constexpr int KMER_LEN = 31;
 
 //We will discard partitions with less than these many reads
+//Can be modified
 constexpr int MIN_READ_COUNT_FOR_ASSEMBLY = 5;
 
 //This parameter should be set to greater than or equal to 
 //the maximum read size expected in the dataset
+//Can be modified
 const unsigned int MAX_READ_SIZE=128;
 
 //Iteration limit to stop partitioning early
+//Can be modified
 const int ITER_LIMIT = 8;
 
-//Important paths
-//Local disk space on each node for velvet (Multiple writes and reads)
-const std::string localFS = "$TMPDIR";
-//Shared space for communicating reads across ranks (Only one time write and read)
-const std::string sharedFS = "/lustre/alurugroup/Chirag/Metagenome_Data/Mock/Trash/"; 
 
 
 /*
  * NOT SUPPOSED TO BE CHANGED BY USER
  */
 
+//Assuming kmer-length is less than 32
+typedef uint64_t KmerIdType;
+
 //Assuming read count is less than 4 Billion
 //NOTE: Not sure about the correctness at the moment if following type is changed
 typedef uint32_t ReadIdType;
 
 //Type definition for partition id
-typedef uint32_t PidType;
+typedef ReadIdType PidType;
+
+//Type for defining read length
+typedef uint16_t ReadLenType;
+
+//Types for frequency and serialNos used during filtering phase 
+typedef uint16_t KmerFreqType;
+typedef uint16_t KmerSNoType;
 
 const unsigned int MAX = std::numeric_limits<ReadIdType>::max();
 const unsigned int MAX_INT = std::numeric_limits<int>::max();
+const uint16_t MAX_FREQ = std::numeric_limits<KmerFreqType>::max();
 
 //Order of layers in kmer tuples (kmer, Pn, Pc)
 class kmerTuple {
   public:
     static const uint8_t kmer = 0, Pn = 1, Pc =2;
+};
+
+//Order of layers in kmer tuples during filtering phase (kmer, readId, freq, kmer_serial_no)
+class kmerTuple_Pre {
+  public:
+    static const uint8_t kmer = 0, rid = 1, freq =2, kmer_sno=3;
 };
 
 //Order of layers in read sequence tuples (Sequence, readid, partitionid, count of nuc. characters in the read)
