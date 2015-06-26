@@ -60,4 +60,12 @@ include_directories("${PROJECT_SOURCE_DIR}/ext/psac-copy/include")
 # add own subdirectories
 add_subdirectory("${PROJECT_SOURCE_DIR}/src")
 
+### Velvet
+message(STATUS "Compiling velvet")
+set (COMPILE_VELVET make MAXKMERLENGTH=63)
+execute_process(
+  COMMAND ${COMPILE_VELVET}
+  WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/ext/velvet")
+
+
 

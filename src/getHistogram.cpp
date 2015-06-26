@@ -74,33 +74,40 @@ int main(int argc, char** argv)
   //Specify Kmer Type
   const int kmerLength_pre = KMER_LEN_PRE;
   typedef bliss::common::DNA AlphabetType;
-  typedef bliss::common::Kmer<kmerLength_pre, AlphabetType, uint64_t> KmerType_pre;
+  typedef bliss::common::Kmer<kmerLength_pre, AlphabetType, KmerIdType> KmerType_pre;
 
-  //Assuming kmer-length is less than 32
-  typedef uint64_t KmerIdType;
 
-  typedef typename std::tuple<KmerIdType, ReadIdType, ReadIdType> tuple_t;
+  //Tuple type for storing kmers during the filtering phase
+  typedef typename std::tuple<KmerIdType, ReadIdType, KmerFreqType, KmerSNoType> tuple_t_pre;
 
   // Populate localVector for each rank and return the vector with all the tuples
-  std::vector<tuple_t> localVector;
+  std::vector<tuple_t_pre> localVector_pre;
+
+  //Read filter flags to trim or remove reads. If bool value is true, we include complete read
+  //If bool value if false, we check readTrimLengths[] to see if any partial length of read is set 
+  //Based on the value of the length, we read the sequence partially or completely ignore it
   std::vector<bool> readFilterFlags;
+  std::vector<ReadLenType> readTrimLengths;
 
   //Generate kmer tuples, keep filter off
   MP_TIMER_START();
-  readFASTQFile< KmerType_pre, includeAllKmers<KmerType_pre> > (cmdLineVals, localVector, readFilterFlags);
+  readFASTQFile< KmerType_pre, includeAllKmers<KmerType_pre> > (cmdLineVals, localVector_pre, readFilterFlags, readTrimLengths);
   MP_TIMER_END_SECTION("File read for pre-process");
 
   //Pre-process
-  trimReadswithHighMedianOrMaxCoverage<>(localVector, readFilterFlags);
-  MP_TIMER_END_SECTION("Digital normalization completed");
+  trimReadswithHighMedianOrMaxCoverage<>(localVector_pre, readFilterFlags, readTrimLengths);
+  MP_TIMER_END_SECTION("Digital normalization plus High frequency trimming completed");
 
   //Delete the local vector
-  localVector.resize(0);
-  
+  localVector_pre.resize(0);
+
+  //Initialize vector for partioning phase
+  typedef typename std::tuple<KmerIdType, PidType, PidType> tuple_t;
+  std::vector<tuple_t> localVector;
 
   //Specify Kmer Type
   const int kmerLength = KMER_LEN;
-  typedef bliss::common::Kmer<kmerLength, AlphabetType, uint64_t> KmerType;
+  typedef bliss::common::Kmer<kmerLength, AlphabetType, KmerIdType> KmerType;
 
 
   // define k-mer and operator types
@@ -118,7 +125,7 @@ int main(int argc, char** argv)
    */
 
   // Populate localVector for each rank and return the vector with all the tuples
-  readFASTQFile< KmerType, includeAllKmersinFilteredReads<KmerType> > (cmdLineVals, localVector, readFilterFlags);
+  readFASTQFile< KmerType, includeAllKmersinFilteredReads<KmerType> > (cmdLineVals, localVector, readFilterFlags, readTrimLengths);
   MP_TIMER_END_SECTION("File read for partitioning");
 
 
@@ -179,7 +186,7 @@ int main(int argc, char** argv)
 
   MP_TIMER_END_SECTION("Kmer Partition size histogram generated");
 
-  finalPostProcessing<KmerType>(localVector, readFilterFlags, cmdLineVals);
+  finalPostProcessing<KmerType>(localVector, readFilterFlags, readTrimLengths, cmdLineVals);
 
   MPI_Barrier(MPI_COMM_WORLD);
   MP_TIMER_END_SECTION("Parallel assembly completed");

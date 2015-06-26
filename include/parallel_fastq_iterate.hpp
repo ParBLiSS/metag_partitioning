@@ -40,6 +40,7 @@ template <typename KmerType, typename typeOfReadingOperation, typename T>
 void readFASTQFile(     cmdLineParams &cmdLineVals,
                         std::vector<T>& localVector,
                         std::vector<bool>& readFilterFlags,
+                        std::vector<ReadLenType>& readTrimLengths,
                         MPI_Comm comm = MPI_COMM_WORLD) 
 {
   /// DEFINE file loader.  this only provides the L1 blocks, not reads.
@@ -115,7 +116,7 @@ void readFASTQFile(     cmdLineParams &cmdLineVals,
 
 
       //Parse the read and place the required values inside the vector
-      vec.fillValuesfromReads(localVector, charStart, charEnd, readFilterFlags, readId); 
+      vec.fillValuesfromReads(localVector, charStart, charEnd, readFilterFlags, readTrimLengths, readId); 
 
       readId += 1;
     }
@@ -158,7 +159,9 @@ struct includeAllKmers
 
   //Fill values in the localVector
   template <typename T, typename BaseCharIterator>
-  void fillValuesfromReads(std::vector<T>& localVector, BaseCharIterator charStart, BaseCharIterator charEnd, std::vector<bool>& readFilterFlags, ReadIdType readId)
+  void fillValuesfromReads(std::vector<T>& localVector, BaseCharIterator charStart, BaseCharIterator charEnd, 
+                          std::vector<bool>& readFilterFlags, std::vector<ReadLenType>& readTrimLengths, 
+                          ReadIdType readId)
   {
     /// kmer generation iterator
     using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
@@ -168,8 +171,107 @@ struct includeAllKmers
     KmerIterType end(charEnd, false);
 
     //Either the filter switch is off or if its own, flag should be true
+    
+    int kmerSerialNo = 0;
     for (; start != end; ++start)
     {
+      //New tuple that goes inside the vector
+      T tupleToInsert;
+
+      //Current kmer
+      auto originalKmer = *start;
+
+      //Get the reverse complement
+      auto reversedKmer = (*start).reverse_complement();
+
+      //Choose the minimum of two to insert in the vector
+      auto KmerToinsert = (originalKmer < reversedKmer) ? originalKmer : reversedKmer;
+
+      //getPrefix() on kmer gives a 64-bit prefix for hashing 
+      std::get<kmerTuple_Pre::kmer>(tupleToInsert) = (KmerToinsert).getPrefix();
+      std::get<kmerTuple_Pre::rid>(tupleToInsert) = readId;
+      std::get<kmerTuple_Pre::kmer_sno>(tupleToInsert) = kmerSerialNo++;
+
+      //Insert tuple to vector
+      localVector.push_back(tupleToInsert);
+    }
+  }
+
+  //Maintain the global order of Ids across all MPI ranks
+  template <typename T>
+  void globalUniquenessOfIds(std::vector<T>& localVector, ReadIdType localReadCount, MPI_Comm comm)
+  {
+    int rank;
+    MPI_Comm_rank(comm, &rank);
+
+    ReadIdType previousReadIdSum;
+
+    //Get MPI Datatype using mxx library
+    mxx::datatype<ReadIdType> MPI_ReadIDType;
+    MPI_Exscan(&localReadCount, &previousReadIdSum, 1, MPI_ReadIDType.type(), MPI_SUM, comm);
+
+
+    //Update all elements
+    if(rank > 0)
+    {
+      for ( auto& eachTuple : localVector) 
+      {
+        //Update Pn and Pc
+        std::get<kmerTuple_Pre::rid>(eachTuple) = std::get<kmerTuple_Pre::rid>(eachTuple) + previousReadIdSum;
+      }
+    }
+  }
+
+};
+
+/*
+ * Generate a vector of tuples(kmer, Pn, Pc) from FASTQ file for each MPI process
+ * Ignore the reads which are discarded during preProcess stage
+ * Each Pn and Pc should by initialized with readIds
+ */
+template <typename KmerType>
+struct includeAllKmersinFilteredReads
+{
+  //Reserve space in the vector
+  template <typename T>
+  void reserveSpace(std::vector<T>& localVector, size_t num_kmers, size_t num_reads)
+  {
+    localVector.reserve(num_kmers * 1.1);
+  }
+
+  //Fill values in the localVector
+  template <typename T, typename BaseCharIterator>
+  void fillValuesfromReads(std::vector<T>& localVector, BaseCharIterator charStart, BaseCharIterator charEnd, 
+                          std::vector<bool>& readFilterFlags, std::vector<ReadLenType>& readTrimLengths, 
+                          ReadIdType readId)
+  {
+    /// kmer generation iterator
+    using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
+
+    //== set up the kmer generating iterators.
+    KmerIterType start(charStart, true);
+    KmerIterType end(charEnd, false);
+
+    //Count how many kmers are we allowed to parse from this read
+    int countKmersToRead = 0;
+    if(readFilterFlags[readId] == true)
+      countKmersToRead = MAX_INT;
+    else if(readFilterFlags[readId] == false)
+    {
+      if(readTrimLengths[readId] == 0)
+        countKmersToRead = 0;
+      else
+      {
+        countKmersToRead = std::max(0, readTrimLengths[readId] - KMER_LEN + 1); 
+      }
+    }
+
+    for (; start != end; ++start)
+    {
+      //Read filters affect here
+      if(countKmersToRead-- == 0)
+        break;
+
       //New tuple that goes inside the vector
       T tupleToInsert;
 
@@ -217,88 +319,6 @@ struct includeAllKmers
       }
     }
   }
-
-};
-
-/*
- * Generate a vector of tuples(kmer, Pn, Pc) from FASTQ file for each MPI process
- * Ignore the reads which are discarded during preProcess stage
- * Each Pn and Pc should by initialized with readIds
- */
-template <typename KmerType>
-struct includeAllKmersinFilteredReads
-{
-  //Reserve space in the vector
-  template <typename T>
-  void reserveSpace(std::vector<T>& localVector, size_t num_kmers, size_t num_reads)
-  {
-    localVector.reserve(num_kmers * 1.1);
-  }
-
-  //Fill values in the localVector
-  template <typename T, typename BaseCharIterator>
-  void fillValuesfromReads(std::vector<T>& localVector, BaseCharIterator charStart, BaseCharIterator charEnd, std::vector<bool>& readFilterFlags, ReadIdType readId)
-  {
-    /// kmer generation iterator
-    using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
-
-    //== set up the kmer generating iterators.
-    KmerIterType start(charStart, true);
-    KmerIterType end(charEnd, false);
-
-    //Either the filter switch is off or if its own, flag should be true
-    if(readFilterFlags[readId] == true)
-    {
-      for (; start != end; ++start)
-      {
-        //New tuple that goes inside the vector
-        T tupleToInsert;
-
-        //Current kmer
-        auto originalKmer = *start;
-
-        //Get the reverse complement
-        auto reversedKmer = (*start).reverse_complement();
-
-        //Choose the minimum of two to insert in the vector
-        auto KmerToinsert = (originalKmer < reversedKmer) ? originalKmer : reversedKmer;
-
-        //getPrefix() on kmer gives a 64-bit prefix for hashing 
-        std::get<kmerTuple::kmer>(tupleToInsert) = (KmerToinsert).getPrefix();
-        std::get<kmerTuple::Pn>(tupleToInsert) = readId;
-        std::get<kmerTuple::Pc>(tupleToInsert) = readId;
-
-        //Insert tuple to vector
-        localVector.push_back(tupleToInsert);
-      }
-    }
-  }
-
-  //Maintain the global order of Ids across all MPI ranks
-  template <typename T>
-  void globalUniquenessOfIds(std::vector<T>& localVector, ReadIdType localReadCount, MPI_Comm comm)
-  {
-    int rank;
-    MPI_Comm_rank(comm, &rank);
-
-    ReadIdType previousReadIdSum;
-
-    //Get MPI Datatype using mxx library
-    mxx::datatype<ReadIdType> MPI_ReadIDType;
-    MPI_Exscan(&localReadCount, &previousReadIdSum, 1, MPI_ReadIDType.type(), MPI_SUM, comm);
-
-
-    //Update all elements
-    if(rank > 0)
-    {
-      for ( auto& eachTuple : localVector) 
-      {
-        //Update Pn and Pc
-        std::get<kmerTuple::Pn>(eachTuple) = std::get<kmerTuple::Pn>(eachTuple) + previousReadIdSum;
-        std::get<kmerTuple::Pc>(eachTuple) = std::get<kmerTuple::Pn>(eachTuple);
-      }
-    }
-  }
 };
 
 /*
@@ -318,7 +338,9 @@ struct includeFirstKmersinFilteredReads
 
   //Fill values in the localVector
   template <typename T, typename BaseCharIterator>
-  void fillValuesfromReads(std::vector<T>& localVector, BaseCharIterator charStart, BaseCharIterator charEnd, std::vector<bool>& readFilterFlags, ReadIdType readId)
+  void fillValuesfromReads(std::vector<T>& localVector, BaseCharIterator charStart, BaseCharIterator charEnd, 
+                          std::vector<bool>& readFilterFlags, std::vector<ReadLenType>& readTrimLengths, 
+                          ReadIdType readId)
   {
     /// kmer generation iterator
     using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
@@ -327,8 +349,22 @@ struct includeFirstKmersinFilteredReads
     KmerIterType start(charStart, true);
     KmerIterType end(charEnd, false);
 
-    //Either the filter switch is off or if its own, flag should be true
+    //Count how many kmers are we allowed to parse from this read
+    int countKmersToRead = 0;
     if(readFilterFlags[readId] == true)
+      countKmersToRead = MAX_INT;
+    else if(readFilterFlags[readId] == false)
+    {
+      if(readTrimLengths[readId] == 0)
+        countKmersToRead = 0;
+      else
+      {
+        countKmersToRead = std::max(0, readTrimLengths[readId] - KMER_LEN + 1); 
+      }
+    }
+
+    //Either the filter switch is off or if its own, flag should be true
+    if(countKmersToRead > 0)
     {
       //New tuple that goes inside the vector
       T tupleToInsert;
@@ -390,22 +426,38 @@ struct includeWholeReadinFilteredReads
 
   //Fill values in the localVector
   template <typename Q, typename BaseCharIterator>
-  void fillValuesfromReads(std::vector<Q>& localVector, BaseCharIterator charStart, BaseCharIterator charEnd, std::vector<bool>& readFilterFlags, ReadIdType readId)
+  void fillValuesfromReads(std::vector<Q>& localVector, BaseCharIterator charStart, BaseCharIterator charEnd, 
+                          std::vector<bool>& readFilterFlags, std::vector<ReadLenType>& readTrimLengths, 
+                          ReadIdType readId)
   {
-    //Either the filter switch is off or if its own, flag should be true
+    //Count how many kmers are we allowed to parse from this read
+    int countCharsToRead = 0;
     if(readFilterFlags[readId] == true)
+      countCharsToRead = charEnd - charStart;
+    else if(readFilterFlags[readId] == false)
+    {
+      if(readTrimLengths[readId] == 0)
+        countCharsToRead = 0;
+      else
+      {
+        countCharsToRead = readTrimLengths[readId]; 
+      }
+    }
+
+    //Either the filter switch is off or if its own, flag should be true
+    if(countCharsToRead >= KMER_LEN)
     {
       //New tuple that goes inside the vector
       Q tupleToInsert;
 
       //Get the read in packed format using the input iterators
       typedef readStorageInfo <typename KmerType::KmerAlphabet, typename KmerType::KmerWordType> ReadInf;
-      getPackedRead<ReadInf>(std::get<readTuple::seq>(tupleToInsert), charStart, charEnd);
+      getPackedRead<ReadInf>(std::get<readTuple::seq>(tupleToInsert), charStart, charStart + countCharsToRead);
 
       //Fill other values in the tupleToInsert
       std::get<readTuple::rid>(tupleToInsert) = readId;
       std::get<readTuple::pid>(tupleToInsert) = MAX;
-      std::get<readTuple::cnt>(tupleToInsert) = charEnd - charStart;
+      std::get<readTuple::cnt>(tupleToInsert) = countCharsToRead;
 
       //Insert tuple to vector
       localVector.push_back(tupleToInsert);
