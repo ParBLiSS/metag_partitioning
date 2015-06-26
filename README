@@ -24,7 +24,13 @@ Run
 ===
 
 Inside the build directory, 
-mpirun -np <COUNT OF PROCESSES> ./bin/getHistogram <FASTQ_FILE>
+mpirun -np <COUNT OF PROCESSES> ./bin/getHistogram --file <FASTQ_FILE> --velvetK <KMER_SIZE_FOR_ASSEMBLY>
+Eg. mpirun -np 8 ./bin/getHistogram --file sample.fastq --velvetK 45
+
+Customize
+=========
+
+Please check the files include/config* . These 2 files contain all the parameters that can be tuned by the users. 
 
 Dependency
 =========
@@ -33,6 +39,3 @@ External git submodules:
 BLISS
 mxx
 velvet
-
-
-
