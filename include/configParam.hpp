@@ -34,7 +34,8 @@ const unsigned int MAX_READ_SIZE=128;
 //Can be modified
 const int ITER_LIMIT = 8;
 
-
+//Print some more log output
+#define DEBUGLOG 0
 
 /*
  * NOT SUPPOSED TO BE CHANGED BY USER

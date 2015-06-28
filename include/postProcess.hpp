@@ -312,6 +312,7 @@ struct AssemblyCommands
 
   void do_init(cmdLineParams &cmdLineVals)
   {
+    std::string outputContigFile = "contigs.fa";
     //filename for writing read sequences
     filename_fasta = localFS + "/reads_" + std::to_string(rank) + ".fasta";
 
@@ -337,12 +338,12 @@ struct AssemblyCommands
     resetVelvet = "rm -rf " + outputDir + "/*";
     resetInput = "> " + filename_fasta;
     resetContigTmps = "> " + filename_contigs;
-    resetOutput = "rm -rf contigs.fa";
+    resetOutput = "rm -rf " + outputContigFile;
     resetSharedFolder = "rm -rf " + sharedFolder;
 
     //Concatenate all the contigs to a single file
     //Every rank should call this one by one
-    finalMerge = "cat " + filename_contigs +" >> contigs.fa"; 
+    finalMerge = "cat " + filename_contigs +" >> " + outputContigFile; 
   }
 
   std::string getBoundaryFastaFileName(int rankWhereToSendReads)
@@ -441,6 +442,8 @@ void runParallelAssembly(std::vector<Q> &localVector, cmdLineParams &cmdLineVals
     auto innerLoopBound = findRange(localVector.rbegin(), localVector.rend(), localVector.back(), pidCmp);
     ofs.open(R.getBoundaryFastaFileName(rankToWhom),std::ofstream::out);
 
+    int countReadsShared = 0;
+
     for(auto it2 = innerLoopBound.first; it2 != innerLoopBound.second; it2++)
     {
       std::string seqHeader = ">" + std::to_string(std::get<readTuple::rid>(*it2)); 
@@ -448,13 +451,22 @@ void runParallelAssembly(std::vector<Q> &localVector, cmdLineParams &cmdLineVals
       getUnPackedRead<ReadInf>(std::get<readTuple::seq>(*it2), std::get<readTuple::cnt>(*it2), seqString);
 
       ofs << seqHeader << "\n" << seqString << "\n"; 
+      countReadsShared++;
     }
+
+#if DEBUGLOG
+    std::cerr << "Rank " << std::to_string(rank) << " shared " << std::to_string(countReadsShared) << " reads with rank " + std::to_string(rankToWhom) + "\n";
+#endif
+
     ofs.close();
   }
 
   //All boundary partitions should be ready in the file system before moving ahead
   MP_TIMER_END_SECTION("[ASSEMBLY TIMER] Boundary partitions ready on disk");
   MPI_Barrier(comm);
+
+  //Log count of times assember is used by this rank
+  int noTimesVelvetRun = 0;
 
   for(auto it=localVector.begin(); it!=localVector.end(); )
   {
@@ -518,11 +530,17 @@ void runParallelAssembly(std::vector<Q> &localVector, cmdLineParams &cmdLineVals
       i = std::system(R.backupContigs.c_str());
       i = std::system(R.resetVelvet.c_str());
       i = std::system(R.resetInput.c_str());
+
+      noTimesVelvetRun++;
     }
 
     //Increment the loop variable
     it = innerLoopBound.second;
   }
+
+#if DEBUGLOG
+  std::cerr << "Rank " << rank << " ran assembler " << noTimesVelvetRun << " times\n";
+#endif
 
   MP_TIMER_END_SECTION("[ASSEMBLY TIMER] Parallel assembly completed");
   MPI_Barrier(comm);
@@ -530,6 +548,10 @@ void runParallelAssembly(std::vector<Q> &localVector, cmdLineParams &cmdLineVals
   {
     if(I == rank)
     {
+#if DEBUGLOG
+      std::cerr << "Rank " << rank << " finished assembly.";
+      i = std::system(("du -sh " + R.filename_contigs + " 1>&2").c_str()); 
+#endif
       i = std::system(R.finalMerge.c_str());
     }
     MPI_Barrier(comm);
