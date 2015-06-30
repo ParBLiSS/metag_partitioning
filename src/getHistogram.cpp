@@ -141,7 +141,7 @@ int main(int argc, char** argv)
   //Sort tuples by KmerId
   bool keepGoing = true;
   int countIterations = 0;
-  while (keepGoing && countIterations < ITER_LIMIT) {
+  while (keepGoing) {
 
     // sort by k-mers and update Pn
     mxx::sort(start, pend, layer_comparator<kmerTuple::kmer, tuple_t>(), MPI_COMM_WORLD, true);

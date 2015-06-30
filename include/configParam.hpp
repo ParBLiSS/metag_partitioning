@@ -7,7 +7,7 @@
 
 //Histogram equalization threshold
 //Can be modified
-constexpr int HIST_EQ_THRESHOLD = 20; 
+constexpr int HIST_EQ_THRESHOLD = 10; 
 
 //Controls the threshold for read filtering
 //Can be modified
@@ -29,10 +29,6 @@ constexpr int MIN_READ_COUNT_FOR_ASSEMBLY = 5;
 //the maximum read size expected in the dataset
 //Can be modified
 const unsigned int MAX_READ_SIZE=128;
-
-//Iteration limit to stop partitioning early
-//Can be modified
-const int ITER_LIMIT = 8;
 
 //Print some more log output
 #define DEBUGLOG 0
