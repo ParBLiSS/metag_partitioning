@@ -8,7 +8,7 @@
 
 ### Introduction ###
 
-Parallel metagenomic assembler designed to handle very large datasets. Program identifies the disconnected subgraphs in the de Bruijn graph, partitions the input dataset and runs a known assember independently on the partitions. This software is a high performance version of the khmer library for assembly.
+Parallel metagenomic assembler designed to handle very large datasets. Program identifies the disconnected subgraphs in the de Bruijn graph, partitions the input dataset and runs a popular assember **Velvet** independently on the partitions. This software is a high performance version of the [khmer](khmer.readthedocs.org) library for assembly.
 
 ### Install ###
 
@@ -24,6 +24,7 @@ The repository and external submodules can be cloned directly:
 ### Run ###
 
 Inside the build directory, 
+
     mpirun -np <COUNT OF PROCESSES> ./bin/getHistogram --file <FASTQ_FILE> --velvetK <KMER_SIZE_FOR_ASSEMBLY>
     Eg. mpirun -np 8 ./bin/getHistogram --file sample.fastq --velvetK 45
 
