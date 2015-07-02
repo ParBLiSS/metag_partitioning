@@ -323,6 +323,86 @@ struct includeAllKmersinFilteredReads
 
 /*
  * Generate a vector of tuples(kmer, Pn, Pc) from FASTQ file for each MPI process
+ * Each Pn and Pc should by initialized with readIds
+ */
+template <typename KmerType>
+struct includeAllKmersinAllReads
+{
+  //Reserve space in the vector
+  template <typename T>
+  void reserveSpace(std::vector<T>& localVector, size_t num_kmers, size_t num_reads)
+  {
+    localVector.reserve(num_kmers * 1.1);
+  }
+
+  //Fill values in the localVector
+  template <typename T, typename BaseCharIterator>
+  void fillValuesfromReads(std::vector<T>& localVector, BaseCharIterator charStart, BaseCharIterator charEnd, 
+                          std::vector<bool>& readFilterFlags, std::vector<ReadLenType>& readTrimLengths, 
+                          ReadIdType readId)
+  {
+    /// kmer generation iterator
+    using KmerIterType = bliss::common::KmerGenerationIterator<BaseCharIterator, KmerType>;
+
+    //== set up the kmer generating iterators.
+    KmerIterType start(charStart, true);
+    KmerIterType end(charEnd, false);
+
+    //Count how many kmers are we allowed to parse from this read
+    for (; start != end; ++start)
+    {
+      //New tuple that goes inside the vector
+      T tupleToInsert;
+
+      //Current kmer
+      auto originalKmer = *start;
+
+      //Get the reverse complement
+      auto reversedKmer = (*start).reverse_complement();
+
+      //Choose the minimum of two to insert in the vector
+      auto KmerToinsert = (originalKmer < reversedKmer) ? originalKmer : reversedKmer;
+
+      //getPrefix() on kmer gives a 64-bit prefix for hashing 
+      std::get<kmerTuple::kmer>(tupleToInsert) = (KmerToinsert).getPrefix();
+      std::get<kmerTuple::Pn>(tupleToInsert) = readId;
+      std::get<kmerTuple::Pc>(tupleToInsert) = readId;
+
+      //Insert tuple to vector
+      localVector.push_back(tupleToInsert);
+    }
+  }
+
+  //Maintain the global order of Ids across all MPI ranks
+  template <typename T>
+  void globalUniquenessOfIds(std::vector<T>& localVector, ReadIdType localReadCount, MPI_Comm comm)
+  {
+    int rank;
+    MPI_Comm_rank(comm, &rank);
+
+    ReadIdType previousReadIdSum;
+
+    //Get MPI Datatype using mxx library
+    mxx::datatype<ReadIdType> MPI_ReadIDType;
+    MPI_Exscan(&localReadCount, &previousReadIdSum, 1, MPI_ReadIDType.type(), MPI_SUM, comm);
+
+
+    //Update all elements
+    if(rank > 0)
+    {
+      for ( auto& eachTuple : localVector) 
+      {
+        //Update Pn and Pc
+        std::get<kmerTuple::Pn>(eachTuple) = std::get<kmerTuple::Pn>(eachTuple) + previousReadIdSum;
+        std::get<kmerTuple::Pc>(eachTuple) = std::get<kmerTuple::Pn>(eachTuple);
+      }
+    }
+  }
+};
+
+
+/*
+ * Generate a vector of tuples(kmer, Pn, Pc) from FASTQ file for each MPI process
  * Ignore the reads which are discarded during preProcess stage
  * Each Pn and Pc should by initialized with readIds
  */
