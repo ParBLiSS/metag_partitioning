@@ -1,3 +1,12 @@
+/**
+ * @file    getHistogram.cpp
+ * @ingroup group
+ * @author  Chirag Jain <cjain7@gatech.edu>
+ * @brief   Implements the complete parallel pipeline for digi_norm, paritioning and assembly.
+ *
+ * Copyright (c) 2015 Georgia Institute of Technology. All Rights Reserved.
+ */
+
 //Includes
 #include <mpi.h>
 #include <iostream>

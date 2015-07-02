@@ -87,6 +87,9 @@ struct cmdLineParams {
 
   //Kmer size to run Velvet
   int velvetKmerSize;
+
+  //Name of the method (Only used for log-sort)
+  std::string method;
 };
 
 
