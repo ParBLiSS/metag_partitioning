@@ -89,6 +89,20 @@ struct cmdLineParams {
 };
 
 
+//Struct to save command line options
+struct cmdLineParamsGraph500 {
+  //scale of the graph = log(num of vertices)
+  size_t scale;
+
+  //average edge degree of vertex in the graph.
+  size_t edgefactor;
+
+  //Kmer size to run Velvet
+  int velvetKmerSize;
+
+  //Name of the method (Only used for log-sort)
+  std::string method;
+};
 
 /*
  * MXX TIMER
