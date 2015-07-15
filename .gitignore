@@ -13,3 +13,9 @@ Session.vim
 build/
 data/*.fastq.*
 release/
+
+.o
+.a
+.pdf
+.aux
+.log
