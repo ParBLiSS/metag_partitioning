@@ -7,3 +7,6 @@
 [submodule "ext/velvet"]
 	path = ext/velvet
 	url = https://github.com/dzerbino/velvet.git
+[submodule "ext/mxx"]
+	path = ext/mxx
+	url = git@bitbucket.org:tcpan/mxx.git

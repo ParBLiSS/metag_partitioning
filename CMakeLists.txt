@@ -55,7 +55,8 @@ add_subdirectory("${CMAKE_SOURCE_DIR}/ext/bliss")
 include_directories("${bliss_SOURCE_DIR}/src")
 include_directories("${bliss_BINARY_DIR}")
 
-include_directories("${CMAKE_SOURCE_DIR}/ext/psac-copy/include")
+#include_directories("${CMAKE_SOURCE_DIR}/ext/psac-copy/include")
+include_directories("${CMAKE_SOURCE_DIR}/ext")
 include_directories("${CMAKE_SOURCE_DIR}/ext/graph500")
 
 # add own subdirectories
