@@ -67,13 +67,15 @@ message(STATUS "Compiling velvet")
 set (COMPILE_VELVET make MAXKMERLENGTH=63)
 execute_process(
   COMMAND ${COMPILE_VELVET}
-  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/ext/velvet")
+  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/ext/velvet"
+  OUTPUT_QUIET ERROR_QUIET)
 
 ### Graph500 generator
 message(STATUS "Compiling Graph500 generator")
 set (COMPILE_GRAPH500_GEN make -f Makefile.mpi all)
 execute_process(
 	COMMAND ${COMPILE_GRAPH500_GEN}
-	WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/ext/graph500/generator")
+	WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/ext/graph500/generator"
+  OUTPUT_QUIET ERROR_QUIET)
 	
 

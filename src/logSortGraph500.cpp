@@ -73,6 +73,102 @@ public:
 
 };
 
+template <typename T>
+std::vector<T> get_partition_seeds(std::vector<T> &vector, MPI_Comm comm) {
+  // use last seed as splitter
+  int rank;
+  int p;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &p);
+
+  //Lets ensure Pn and Pc are equal for every tuple
+  //This was not ensured during the program run
+  std::for_each(vector.begin(), vector.end(), [](T &t){ std::get<kmerTuple::Pn>(t) = std::get<kmerTuple::Pc>(t);});
+
+  // block partition
+  if (p > 1) {
+    mxx::block_decompose(vector, comm);
+
+    // mxx_sort
+    mxx::sort(vector.begin(), vector.end(), [](const T& x, const T&y){
+      return std::get<kmerTuple::Pc>(x) < std::get<kmerTuple::Pc>(y);
+    }, comm, false);
+  } else {
+    std::sort(vector.begin(), vector.end(), [](const T& x, const T&y){
+          return std::get<kmerTuple::Pc>(x) < std::get<kmerTuple::Pc>(y);
+    });
+  }
+  //printf("rank %d vert count : %lu first %ld last %ld\n", rank, vector.size(), std::get<kmerTuple::Pc>(vector.front()), std::get<kmerTuple::Pc>(vector.back()));
+
+
+  // local unique - since we need to rebalance and do another round of unique, copy the unique to a new vector.
+  std::vector<T> seeds;
+  if (vector.size() > 0) {
+    T prev = vector.front();
+    seeds.emplace_back(prev);  // copy in the first one - this is definitely unique
+
+    for (int i = 1; i < vector.size(); ++i) {
+      if (std::get<kmerTuple::Pc>(prev) < std::get<kmerTuple::Pc>(vector[i])) {
+        prev = vector[i];
+        seeds.emplace_back(prev);
+      }
+    }
+  }
+  //printf("rank %d vert count : %lu seeds count: %lu\n", rank, vector.size(), seeds.size());
+
+
+  if (p > 1) {
+
+    std::vector<T> splitters;
+    if ((seeds.size() > 0) && (rank > 0)) {
+      splitters.emplace_back(seeds.front());
+    }
+    mxx::allgatherv(splitters, comm).swap(splitters);
+
+    //== compute the send count
+    std::vector<int> send_counts(p, 0);
+    if (seeds.size() > 0) {
+      //== since both sorted, search map entry in buffer - mlog(n).  the otherway around is nlog(m).
+      // note that map contains splitters.  range defined as [map[i], map[i+1]), so when searching in buffer using entry in map, search via lower_bound
+      auto b = seeds.begin();
+      auto e = b;
+      for (int i = 0; i < splitters.size(); ++i) {
+        e = ::std::lower_bound(b, seeds.end(), splitters[i], [](const T& x, const T&y) {
+          return std::get<kmerTuple::Pc>(x) == std::get<kmerTuple::Pc>(y);
+        });
+        send_counts[i] = ::std::distance(b, e);
+        b = e;
+      }
+      // last 1
+      send_counts[splitters.size()] = ::std::distance(b, seeds.end());
+    }
+
+//    for (int i = 0; i < p; ++i) {
+//      printf("rank %d send to %d %d\n", rank, i, send_counts[i]);
+//    }
+
+    // a2a to redistribute seeds so we can do unique one more time.
+    mxx::all2all(seeds, send_counts, comm).swap(seeds);
+
+    // local sort and local unique
+    std::sort(seeds.begin(), seeds.end(), [](const T& x, const T&y){
+      return std::get<kmerTuple::Pc>(x) < std::get<kmerTuple::Pc>(y);
+    });
+
+    auto newend = std::unique(seeds.begin(), seeds.end(), [](const T& x, const T&y){
+      return std::get<kmerTuple::Pc>(x) == std::get<kmerTuple::Pc>(y);
+    });
+    seeds.erase(newend, seeds.end());
+
+    //printf("rank %d vert count : %lu seeds final count: %lu\n", rank, vector.size(), seeds.size());
+
+  }
+
+  return seeds;
+
+}
+
+
 // parallel/MPI log(D_max) implementation
 void cluster_reads_par(cmdLineParamsGraph500 &cmdLineVals)
 {
@@ -300,6 +396,23 @@ void cluster_reads_par(cmdLineParamsGraph500 &cmdLineVals)
     {
       std::cout << "Algorithm took " << countIterations << " iteration.\n";
       std::cout << "TOTAL TIME : " << time << " ms.\n"; 
+    }
+
+    // get the seeds,
+    auto seeds = get_partition_seeds(localVector, MPI_COMM_WORLD);
+    if (p > 1)
+      // gather the seeds
+      mxx::gather_vectors(seeds, MPI_COMM_WORLD).swap(seeds);
+
+    // rank 0 write out the seeds
+    if (rank == 0) {
+      std::string seedFile = cmdLineVals.seedFile + "." + cmdLineVals.method;
+
+      std::ofstream ofs(seedFile.c_str());
+      std::for_each(seeds.begin(), seeds.end(), [&ofs](tuple_t const& x) { ofs << std::get<kmerTuple::Pc>(x) << std::endl; });
+
+      ofs.close();
+      printf("partition count = %lu. seeds written to %s\n", seeds.size(), seedFile.c_str());
     }
 }
 
@@ -593,6 +706,25 @@ void cluster_reads_par_inactive(cmdLineParamsGraph500 &cmdLineVals, bool load_ba
       std::cout << "Algorithm took " << countIterations << " iteration.\n";
       std::cout << "TOTAL TIME : " << time << " ms.\n"; 
     }
+
+    // get the seeds,
+    auto seeds = get_partition_seeds(localVector, MPI_COMM_WORLD);
+
+    // gather the seeds
+    if (p > 1)
+      mxx::gather_vectors(seeds, MPI_COMM_WORLD).swap(seeds);
+
+    // rank 0 write out the seeds
+    if (rank == 0) {
+      std::string seedFile = cmdLineVals.seedFile + "." + cmdLineVals.method;
+
+      std::ofstream ofs(seedFile.c_str());
+      std::for_each(seeds.begin(), seeds.end(), [&ofs](tuple_t const& x) { ofs << std::get<kmerTuple::Pc>(x) << std::endl; });
+
+      ofs.close();
+      printf("partition count = %lu. seeds written to %s\n", seeds.size(), seedFile.c_str());
+
+    }
 }
 
 int main(int argc, char** argv)
@@ -614,6 +746,7 @@ int main(int argc, char** argv)
   cmd.defineOption("scale", "scale of graph for Graph500 generator = log(num of vertices)", ArgvParser::OptionRequiresValue | ArgvParser::OptionRequired);
   cmd.defineOption("edgefactor", "average edge degree for vertex for Graph500 generator", ArgvParser::OptionRequiresValue | ArgvParser::OptionRequired);
   cmd.defineOption("method", "Type of log-sort to run (standard[Naive], inactive[AP], loadbalance[AP_LB])", ArgvParser::OptionRequiresValue | ArgvParser::OptionRequired);
+  cmd.defineOption("seedfile", "file to write out the seed for each component.", ArgvParser::OptionRequiresValue | ArgvParser::OptionRequired);
 
   int result = cmd.parse(argc, argv);
 
@@ -626,6 +759,7 @@ int main(int argc, char** argv)
   cmdLineVals.scale = atol(cmd.optionValue("scale").c_str());
   cmdLineVals.edgefactor = atol(cmd.optionValue("edgefactor").c_str());
   cmdLineVals.method = cmd.optionValue("method"); 
+  cmdLineVals.seedFile = cmd.optionValue("seedfile");
 
   if (cmdLineVals.method == "standard")
     cluster_reads_par(cmdLineVals);

@@ -102,6 +102,8 @@ struct cmdLineParamsGraph500 {
 
   //Name of the method (Only used for log-sort)
   std::string method;
+
+  std::string seedFile;
 };
 
 /*
