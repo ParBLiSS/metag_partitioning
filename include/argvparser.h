@@ -21,6 +21,7 @@
 #include <vector>
 #include <map>
 #include <list>
+#include <sstream>
 
 namespace CommandLineProcessing
 {

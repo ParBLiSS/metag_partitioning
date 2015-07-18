@@ -1,6 +1,7 @@
 #ifndef CONFIG_HPP
 #define CONFIG_HPP
 
+#include <limits>
 /*
  * ADJUSTABLE BY USER
  */

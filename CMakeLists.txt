@@ -58,6 +58,7 @@ include_directories("${bliss_BINARY_DIR}")
 #include_directories("${CMAKE_SOURCE_DIR}/ext/psac-copy/include")
 include_directories("${CMAKE_SOURCE_DIR}/ext")
 include_directories("${CMAKE_SOURCE_DIR}/ext/graph500")
+#include_directories("/home/tpan/src/bfs_debruijn")
 
 # add own subdirectories
 add_subdirectory("${CMAKE_SOURCE_DIR}/src")
