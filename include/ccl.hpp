@@ -29,10 +29,13 @@ using namespace std;
 
 #include <tuple>
 #include <vector>
+#include <type_traits>  // remove_reference
+#include <utility>      // declval
+#include <limits>       // numeric_limits
 
 
-template <typename CmdLineParamsType, typename tuple_t>
-void dump_seeds(std::vector<tuple_t> const &seeds, MPI_Comm comm, CmdLineParamsType &cmdLineVals) {
+template <typename tuple_t>
+void dump_seeds(std::vector<tuple_t> const &seeds, MPI_Comm comm, std::string const &seedFile) {
 	
     int rank, p;
     MPI_Comm_rank(comm, &rank);
@@ -46,8 +49,6 @@ void dump_seeds(std::vector<tuple_t> const &seeds, MPI_Comm comm, CmdLineParamsT
 
     // rank 0 write out the seeds
     if (rank == 0) {
-      std::string seedFile = cmdLineVals.seedFile + "." + cmdLineVals.method;
-
       std::ofstream ofs(seedFile.c_str());
       std::for_each(allseeds.begin(), allseeds.end(), [&ofs](tuple_t const& x) { ofs << std::get<kmerTuple::Pc>(x) << std::endl; });
 
@@ -55,189 +56,258 @@ void dump_seeds(std::vector<tuple_t> const &seeds, MPI_Comm comm, CmdLineParamsT
       printf("partition count = %lu. seeds written to %s\n", allseeds.size(), seedFile.c_str());
     }
 }
+template <typename tuple_t>
+void dump_vector(std::vector<tuple_t> const &seeds, MPI_Comm comm, std::string const &seedFile) {
+	
+    int rank, p;
+    MPI_Comm_rank(comm, &rank);
+    MPI_Comm_size(comm, &p);
 
-template <typename T>
-std::vector<T> get_partition_seeds(std::vector<T> &vector, MPI_Comm comm) {
+    std::stringstream ss;
+    ss << seedFile << "." << rank;
+
+      std::ofstream ofs(ss.str().c_str());
+      std::for_each(seeds.begin(), seeds.end(), [&ofs](tuple_t const& x) { 
+        ofs << std::get<kmerTuple::kmer>(x) << " " <<
+              std::get<kmerTuple::Pn>(x) << " " <<
+              std::get<kmerTuple::Pc>(x) << std::endl; });
+
+      ofs.close();
+      printf("rank %d partition count = %lu. seeds written to %s\n", rank, seeds.size(), ss.str().c_str());
+}
+
+template <typename T, typename Comparator, typename Equal>
+void unique(std::vector<T> &vector, Comparator const &less, Equal const &eq, MPI_Comm comm) {
   // use last seed as splitter
   int rank;
   int p;
   MPI_Comm_rank(comm, &rank);
   MPI_Comm_size(comm, &p);
+//
+//  if (rank == 0)
+//    printf("UNIQUE_COPY\n");
 
-  //Lets ensure Pn and Pc are equal for every tuple
-  //This was not ensured during the program run
-  std::for_each(vector.begin(), vector.end(), [](T &t){ std::get<kmerTuple::Pn>(t) = std::get<kmerTuple::Pc>(t);});
 
-  // block partition
+
+//  for (int i= 0; i < vector.size(); ++i) {
+//    printf("before sort rank %d: %ld %ld %ld \n", rank,
+//       std::get<kmerTuple::kmer>(vector[i]),
+//       std::get<kmerTuple::Pn>(vector[i]),
+//       std::get<kmerTuple::Pc>(vector[i]));
+//  }
+
+  assert(vector.size() > 0);
+
+  // sort
   if (p > 1) {
     mxx::block_decompose(vector, comm);
 
     // mxx_sort
-    mxx::sort(vector.begin(), vector.end(), [](const T& x, const T&y){
-      return std::get<kmerTuple::Pc>(x) < std::get<kmerTuple::Pc>(y);
-    }, comm, false);
+    mxx::sort(vector.begin(), vector.end(), less, comm, false);
+
   } else {
-    std::sort(vector.begin(), vector.end(), [](const T& x, const T&y){
-          return std::get<kmerTuple::Pc>(x) < std::get<kmerTuple::Pc>(y);
-    });
+    std::sort(vector.begin(), vector.end(), less);
   }
-//  printf("rank %d vert count : %lu first %ld last %ld\n", rank, vector.size(), std::get<kmerTuple::Pc>(vector.front()), std::get<kmerTuple::Pc>(vector.back()));
+//  //printf("rank %d vert count : %lu first %ld last %ld\n", rank, vector.size(), std::get<kmerTuple::Pc>(vector.front()), std::get<kmerTuple::Pc>(vector.back()));
+//    for (int i= 0; i < vector.size(); ++i) {
+//      printf("after sort rank %d: %ld %ld %ld \n", rank,
+//         std::get<kmerTuple::kmer>(vector[i]),
+//         std::get<kmerTuple::Pn>(vector[i]),
+//         std::get<kmerTuple::Pc>(vector[i]));
+//    }
+
+  // local unique.
+  auto end = std::unique(vector.begin(), vector.end(), eq);
+  vector.erase(end, vector.end());
 
 
-  // local unique - since we need to rebalance and do another round of unique, copy the unique to a new vector.
-  std::vector<T> seeds;
-  if (vector.size() > 0) {
-    T prev = vector.front();
-    seeds.emplace_back(prev);  // copy in the first one - this is definitely unique
+//  //printf("rank %d vert count : %lu seeds count: %lu\n", rank, vector.size(), seeds.size());
+//  for (int i= 0; i < seeds.size(); ++i) {
+//    printf("after local unique rank %d: %ld %ld %ld \n", rank, std::get<kmerTuple::kmer>(seeds[i]),
+//           std::get<kmerTuple::Pn>(seeds[i]), std::get<kmerTuple::Pc>(seeds[i]));
+//  }
 
-    for (int i = 1; i < vector.size(); ++i) {
-      if (std::get<kmerTuple::Pc>(prev) < std::get<kmerTuple::Pc>(vector[i])) {
-        prev = vector[i];
-        seeds.emplace_back(prev);
-      }
-    }
-  }
-//  printf("rank %d vert count : %lu seeds count: %lu\n", rank, vector.size(), seeds.size());
-
-
+  // check if cross boundaries boundaries.
   if (p > 1) {
 
     std::vector<T> splitters;
-    if ((seeds.size() > 0) && (rank > 0)) {
-      splitters.emplace_back(seeds.front());
+    if ((vector.size() > 0) && (rank > 0)) {
+      splitters.emplace_back(vector.front());
     }
     mxx::allgatherv(splitters, comm).swap(splitters);
 
+    // splitters should contain unique values only
+    auto uend = std::unique(splitters.begin(), splitters.end(), eq);
+    splitters.erase(uend, splitters.end());
+
+//    //printf("rank %d vert count : %lu vector count: %lu\n", rank, vector.size(), vector.size());
+//    for (int i= 0; i < splitters.size(); ++i) {
+//      printf("spliters rank %d: %ld %ld %ld \n", rank, std::get<kmerTuple::kmer>(splitters[i]),
+//             std::get<kmerTuple::Pn>(splitters[i]), std::get<kmerTuple::Pc>(splitters[i]));
+//    }
+
     //== compute the send count
     std::vector<int> send_counts(p, 0);
-    if (seeds.size() > 0) {
+    if (vector.size() > 0) {
       //== since both sorted, search map entry in buffer - mlog(n).  the otherway around is nlog(m).
       // note that map contains splitters.  range defined as [map[i], map[i+1]), so when searching in buffer using entry in map, search via lower_bound
-      auto b = seeds.begin();
+      auto b = vector.begin();
       auto e = b;
       for (int i = 0; i < splitters.size(); ++i) {
-        e = ::std::lower_bound(b, seeds.end(), splitters[i], [](const T& x, const T&y) {
-          return std::get<kmerTuple::Pc>(x) == std::get<kmerTuple::Pc>(y);
-        });
+        e = ::std::lower_bound(b, vector.end(), splitters[i], less);
         send_counts[i] = ::std::distance(b, e);
         b = e;
       }
       // last 1
-      send_counts[splitters.size()] = ::std::distance(b, seeds.end());
+      send_counts[splitters.size()] = ::std::distance(b, vector.end());
     }
 
 //    for (int i = 0; i < p; ++i) {
 //      printf("rank %d send to %d %d\n", rank, i, send_counts[i]);
 //    }
 
-    // a2a to redistribute seeds so we can do unique one more time.
-    mxx::all2all(seeds, send_counts, comm).swap(seeds);
+    // a2a to redistribute vector so we can do unique one more time.
+    mxx::all2all(vector, send_counts, comm).swap(vector);
 
-    // local sort and local unique
-    std::sort(seeds.begin(), seeds.end(), [](const T& x, const T&y){
-      return std::get<kmerTuple::Pc>(x) < std::get<kmerTuple::Pc>(y);
-    });
 
-    auto newend = std::unique(seeds.begin(), seeds.end(), [](const T& x, const T&y){
-      return std::get<kmerTuple::Pc>(x) == std::get<kmerTuple::Pc>(y);
-    });
-    seeds.erase(newend, seeds.end());
+//    //printf("rank %d vert count : %lu vector count: %lu\n", rank, vector.size(), vector.size());
+//    for (int i= 0; i < vector.size(); ++i) {
+//      printf("after all2all rank %d: %ld %ld %ld \n", rank, std::get<kmerTuple::kmer>(vector[i]),
+//             std::get<kmerTuple::Pn>(vector[i]), std::get<kmerTuple::Pc>(vector[i]));
+//    }
+
+
+    // local unique.  (still sorted)
+    auto newend = std::unique(vector.begin(), vector.end(), eq);
+    vector.erase(newend, vector.end());
 
 //    printf("rank %d vert count : %lu seeds final count: %lu\n", rank, vector.size(), seeds.size());
 
   }
 
-  return seeds;
+//  //printf("rank %d vert count : %lu seeds count: %lu\n", rank, vector.size(), seeds.size());
+//  for (int i= 0; i < seeds.size(); ++i) {
+//    printf("after global unique rank %d: %ld %ld %ld \n", rank, std::get<kmerTuple::kmer>(seeds[i]),
+//           std::get<kmerTuple::Pn>(seeds[i]), std::get<kmerTuple::Pc>(seeds[i]));
+//  }
 
 }
 
 
+template <typename T, typename Comparator, typename Equal>
+std::vector<T> unique_copy(std::vector<T> const &vector, Comparator const &less, Equal const &eq, MPI_Comm comm) {
+
+  std::vector<T> uniq = vector;
+  unique(uniq, less, eq, comm);
+  return uniq;
+}
+
+
+
 template <typename T>
-std::vector<T> get_partition_seeds_to_all(std::vector<T> &vector, MPI_Comm comm) {
-  // use last seed as splitter
-  int rank;
-  int p;
-  MPI_Comm_rank(comm, &rank);
-  MPI_Comm_size(comm, &p);
+std::vector<T> get_partition_seeds(std::vector<T> &vector, MPI_Comm comm) {
+//  for (int i= 0; i < vector.size(); ++i) {
+//    printf("before SEEDS rank %d: %ld %ld %ld \n", rank, std::get<kmerTuple::kmer>(vector[i]), 
+//       std::get<kmerTuple::Pn>(vector[i]), std::get<kmerTuple::Pc>(vector[i]));
+//  }
+//  int rank;
+//  MPI_Comm_rank(comm, &rank);
+//  if (rank == 0)
+//    printf("seeds\n");
+
+
 
   //Lets ensure Pn and Pc are equal for every tuple
   //This was not ensured during the program run
   std::for_each(vector.begin(), vector.end(), [](T &t){ std::get<kmerTuple::Pn>(t) = std::get<kmerTuple::Pc>(t);});
 
-  // block partition
-  if (p > 1) {
-    mxx::block_decompose(vector, comm);
+  // sort and find unique in distributed environment.
+  return unique_copy(vector, [](const T& x, const T&y){
+    return std::get<kmerTuple::Pc>(x) < std::get<kmerTuple::Pc>(y);
+  }, [](const T& x, const T&y){
+    return std::get<kmerTuple::Pc>(x) == std::get<kmerTuple::Pc>(y);
+  }, comm);
 
-    // mxx_sort
-    mxx::sort(vector.begin(), vector.end(), [](const T& x, const T&y){
-      return std::get<kmerTuple::Pc>(x) < std::get<kmerTuple::Pc>(y);
-    }, comm, false);
-  } else {
-    std::sort(vector.begin(), vector.end(), [](const T& x, const T&y){
-          return std::get<kmerTuple::Pc>(x) < std::get<kmerTuple::Pc>(y);
-    });
-  }
-  //printf("rank %d vert count : %lu first %ld last %ld\n", rank, vector.size(), std::get<kmerTuple::Pc>(vector.front()), std::get<kmerTuple::Pc>(vector.back()));
+}
 
 
-  // local unique - since we need to rebalance and do another round of unique, copy the unique to a new vector.
-  std::vector<T> seeds;
-  if (vector.size() > 0) {
-    T prev = vector.front();
-    seeds.emplace_back(prev);  // copy in the first one - this is definitely unique
-
-    for (int i = 1; i < vector.size(); ++i) {
-      if (std::get<kmerTuple::Pc>(prev) < std::get<kmerTuple::Pc>(vector[i])) {
-        prev = vector[i];
-        seeds.emplace_back(prev);
-      }
-    }
-  }
-  //printf("rank %d vert count : %lu seeds count: %lu\n", rank, vector.size(), seeds.size());
 
 
-  if (p > 1) {
-    // gather to first
-    mxx::gather_vectors(seeds, comm).swap(seeds);
+template <typename T>
+std::vector<T> get_partition_seeds_to_all(std::vector<T> &vector, MPI_Comm comm) {
 
-    // local sort and local unique
-    if (rank == 0) {
-      std::sort(seeds.begin(), seeds.end(), [](const T& x, const T&y){
-        return std::get<kmerTuple::Pc>(x) < std::get<kmerTuple::Pc>(y);
-      });
+  // use last seed as splitter
+  int rank;
+  int p;
+  MPI_Comm_rank(comm, &rank);
+  MPI_Comm_size(comm, &p);
+//
+//  for (int i= 0; i < vector.size(); ++i) {
+//    printf("before SEEDS rank %d: %ld %ld %ld \n", rank, 
+//       std::get<kmerTuple::kmer>(vector[i]), 
+//       std::get<kmerTuple::Pn>(vector[i]),
+//       std::get<kmerTuple::Pc>(vector[i]));
+//  }
+//
 
-      auto newend = std::unique(seeds.begin(), seeds.end(), [](const T& x, const T&y){
-        return std::get<kmerTuple::Pc>(x) == std::get<kmerTuple::Pc>(y);
-      });
-      seeds.erase(newend, seeds.end());
-    }
+//  if (rank == 0)
+//    printf("seeds to all\n");
 
-    // broadcast size to all nodes
-    size_t count = seeds.size();
-    MPI_Bcast(&count, 1, MPI_LONG, 0, comm);
 
-    // reserve size on all nodes
-    if (rank != 0)  seeds.resize(count);
+  auto temp = get_partition_seeds(vector, comm);
 
-    // broadcast data to all nodes
-    mxx::datatype<T> dt;
-    MPI_Bcast(&(seeds[0]), count, dt.type(), 0, comm);
-    
-    //printf("rank %d vert count : %lu seeds final count: %lu (before %lu)\n", rank, vector.size(), seeds.size(), count);
+  // get the sizes
+  size_t count = temp.size();
+  std::vector<size_t> recv_counts(p, 0);
+  mxx::datatype<size_t> count_dt;
+  MPI_Allgather(&count, 1, count_dt.type(), &(recv_counts[0]), 1, count_dt.type(), comm);
 
-  }
+
+  // compute the displacements
+  std::vector<size_t> recv_displs = mxx::get_displacements(recv_counts);
+
+  // allocate
+  std::vector<T> seeds(recv_displs[p-1] + recv_counts[p-1]);
+
+  // allgatherv
+  mxx::datatype<T> dt;
+  MPI_Allgatherv(&(temp[0]), count, dt.type(), &(seeds[0]), recv_counts, recv_displs, dt.type(), comm);
 
   return seeds;
 
 }
 
 
-// parallel/MPI log(D_max) implementation
+
+template <typename T>
+void unique(std::vector<T> &vector, MPI_Comm comm) {
+
+//  int rank;
+//  MPI_Comm_rank(comm, &rank);
+//  if (rank == 0)
+//    printf("UNIQUE\n");
+
+  unique(vector, [](const T& x, const T&y){
+    return (std::get<kmerTuple::Pc>(x) < std::get<kmerTuple::Pc>(y)) ? true :
+      ( (std::get<kmerTuple::Pc>(x) == std::get<kmerTuple::Pc>(y)) && (std::get<kmerTuple::Pn>(x) < std::get<kmerTuple::Pn>(y)) ? true :
+      ( (std::get<kmerTuple::Pc>(x) == std::get<kmerTuple::Pc>(y)) && (std::get<kmerTuple::Pn>(x) == std::get<kmerTuple::Pn>(y)) && (std::get<kmerTuple::kmer>(x) < std::get<kmerTuple::kmer>(y)) ? true : false ) ) ;
+  }, [](const T& x, const T&y){
+    return (std::get<kmerTuple::Pc>(x) == std::get<kmerTuple::Pc>(y)) &&
+      (std::get<kmerTuple::Pn>(x) == std::get<kmerTuple::Pn>(y)) &&
+      (std::get<kmerTuple::kmer>(x) == std::get<kmerTuple::kmer>(y));
+  }, comm);
+}
+
+
+/// parallel/MPI log(D_max) implementation
+/// localVector should be a list of undirected edges (reverse of each edge is present as well)
 template <typename tuple_t>
 void cluster_reads_par(::std::vector<tuple_t> &localVector, MPI_Comm comm)
 {
   static constexpr int Pn = kmerTuple::Pn;
   static constexpr int Pc = kmerTuple::Pc;
+
+  using PID_TYPE = typename std::remove_reference<decltype(std::get<kmerTuple::Pc>(std::declval<tuple_t>()))>::type;
 
   // get communicaiton parameters
   int rank, p;
@@ -245,7 +315,7 @@ void cluster_reads_par(::std::vector<tuple_t> &localVector, MPI_Comm comm)
   MPI_Comm_size(comm, &p);
 
   if(!rank) {
-    std::cout << "Runnning with " << p << " processors.\n"; 
+    std::cout << "Runnning with " << p << " processors.\n";
   }
 
   mxx::timer t;
@@ -260,32 +330,16 @@ void cluster_reads_par(::std::vector<tuple_t> &localVector, MPI_Comm comm)
 
   MP_TIMER_START();
 
-  assert(localVector.size() > 0);
-  auto start = localVector.begin();
-  auto end = localVector.end();
-  auto pend = end;
+  // keep only unique entries from the local vector.
+  unique(localVector, comm);
 
+  assert(localVector.size() > 0);
 
   //Sort tuples by KmerId
   bool keepGoing = true;
   int countIterations = 0;
-  // sort by k-mer is first step (and then never again done)
 
-  // sort by k-mers and update Pn
-  mxx::sort(start, pend, layer_comparator<kmerTuple::kmer, tuple_t>(), comm, false);
-  typedef KmerReduceAndMarkAsInactive<tuple_t> KmerReducerType;
-  KmerReducerType r1;
-  r1(start, pend, comm);
-  MP_TIMER_END_SECTION("iteration KMER phase completed");
-
-
-  // remove the MAX thing after k-mer reduce:
-  // TODO: own k-mer reduction function!
-  for (auto it = localVector.begin(); it != localVector.end(); ++it)
-  {
-    if (std::get<Pn>(*it) >= std::numeric_limits<int>::max()-Pn)
-      std::get<Pn>(*it) = std::get<Pc>(*it);
-  }
+  layer_comparator<Pc, tuple_t> pc_comp;
 
   while (keepGoing) {
     mxx::sort(localVector.begin(), localVector.end(),
@@ -296,7 +350,6 @@ void cluster_reads_par(::std::vector<tuple_t> &localVector, MPI_Comm comm)
         }, comm, false);
     MP_TIMER_END_SECTION("mxx::sort");
 
-    layer_comparator<Pc, tuple_t> pc_comp;
 
     // scan and find new p
     auto begin = localVector.begin();
@@ -317,7 +370,7 @@ void cluster_reads_par(::std::vector<tuple_t> &localVector, MPI_Comm comm)
     // for each processor, get the first element of the last most element
     tuple_t prev_min = mxx::exscan(last_min,
         [](const tuple_t& x, const tuple_t& y){
-          // return max Pc, if equal, return min Pn
+          // return max Pc, if equal, return min Pn.  sorted by Pc + scan with max Pc == no op.  this finds min Pn when equal Pc.
           if (std::get<Pc>(x) < std::get<Pc>(y) ||
             (std::get<Pc>(x) == std::get<Pc>(y)
              && std::get<Pn>(x) > std::get<Pn>(y)))
@@ -361,6 +414,10 @@ void cluster_reads_par(::std::vector<tuple_t> &localVector, MPI_Comm comm)
       }
 
       // remove single element buckets
+      // TCP: if tuple range crosses process boundary with 1 element in first process, it will have the min Pn already.
+      // TCP: problem:  if we have 2 vertices referring to each other only, then this will set each as separate.
+      //    FIX: only set Pc to Pn if Pn is lower.  if not lower, then we have a self loop, or a real loop between 2 or more vertes,
+      //    and the updated Pc with smaller Pn will be sorted to be together with the pn.  to resolve this, add self loops to all nodes.
       if (eqr.first + 1 == eqr.second && (rank == 0
           || (rank > 0 && std::get<Pc>(*eqr.first) != std::get<Pc>(prev_el)))) {
         // single element -> no need to stick around
@@ -368,6 +425,8 @@ void cluster_reads_par(::std::vector<tuple_t> &localVector, MPI_Comm comm)
         begin = eqr.second;
         continue;
       }
+
+
 
       // check if all elements of the bucket are identical -> set them to
       // their Pn.
@@ -383,7 +442,7 @@ void cluster_reads_par(::std::vector<tuple_t> &localVector, MPI_Comm comm)
 
       // for each further element:
       bool found_flip = false;
-      uint32_t prev_pn = std::get<Pn>(prev_el);
+      PID_TYPE prev_pn = std::get<Pn>(prev_el);
       auto it = eqr.first;
       if (rank == 0 || (rank > 0 && std::get<Pc>(*eqr.first) != std::get<Pc>(prev_el))) {
           // skip first (since it is the min entry
@@ -391,7 +450,7 @@ void cluster_reads_par(::std::vector<tuple_t> &localVector, MPI_Comm comm)
           it++;
       }
       for (; it != eqr.second; ++it) {
-        uint32_t next_pn = std::get<Pn>(*it);
+        PID_TYPE next_pn = std::get<Pn>(*it);
         // if duplicate or both entries are equal (Pn==Pc)
         if (std::get<Pn>(*it) == prev_pn || std::get<Pn>(*it) == std::get<Pc>(*it)) {
           if (!found_flip) {
@@ -449,14 +508,20 @@ void cluster_reads_par(::std::vector<tuple_t> &localVector, MPI_Comm comm)
     }
 }
 
-// parallel/MPI log(D_max) implementation with removal of inactive partitions
+/// parallel/MPI log(D_max) implementation with removal of inactive partitions
+/// localVector should be undirected (i.e. each edge has its reverse in there as well)
 template <typename tuple_t>
 void cluster_reads_par_inactive(bool load_balance, std::vector<tuple_t> &localVector, MPI_Comm comm)
 {
   static constexpr int Pn = kmerTuple::Pn;
   static constexpr int Pc = kmerTuple::Pc;
+
+  using PID_TYPE = typename std::remove_reference<decltype(std::get<kmerTuple::Pc>(std::declval<tuple_t>()))>::type;
+
+  static constexpr PID_TYPE PID_MAX = std::numeric_limits<PID_TYPE>::max();
+
   //Specify Kmer Type
-  static constexpr uint32_t inactive_partition = MAX;
+  static constexpr PID_TYPE inactive_partition = PID_MAX;
 
   // get communicaiton parameters
   int rank, p;
@@ -481,29 +546,18 @@ void cluster_reads_par_inactive(bool load_balance, std::vector<tuple_t> &localVe
 
   MP_TIMER_START();
 
+
   assert(localVector.size() > 0);
-  auto start = localVector.begin();
-  auto end = localVector.end();
-  auto pend = end;
+
+
+  // keep only unique entries from the local vector.
+  unique(localVector, comm);
 
   //Sort tuples by KmerId
   bool keepGoing = true;
   int countIterations = 0;
 
-  // sort by k-mers and update Pn
-  mxx::sort(start, pend, layer_comparator<kmerTuple::kmer, tuple_t>(), comm, false);
-  typedef KmerReduceAndMarkAsInactive<tuple_t> KmerReducerType;
-  KmerReducerType r1;
-  r1(start, pend, comm);
-  MP_TIMER_END_SECTION("iteration KMER phase completed");
-
-  // remove the MAX thing after k-mer reduce:
-  // TODO: own k-mer reduction function!
-  for (auto it = localVector.begin(); it != localVector.end(); ++it)
-  {
-    if (std::get<Pn>(*it) >= std::numeric_limits<int>::max()-Pn)
-      std::get<Pn>(*it) = std::get<Pc>(*it);
-  }
+  auto pend = localVector.end();
 
   while (keepGoing) {
     mxx::sort(localVector.begin(), pend,
@@ -639,7 +693,7 @@ void cluster_reads_par_inactive(bool load_balance, std::vector<tuple_t> &localVe
 
       // for each further element:
       bool found_flip = false;
-      uint32_t prev_pn = std::get<Pn>(prev_el);
+      PID_TYPE prev_pn = std::get<Pn>(prev_el);
       auto it = eqr.first;
       if (rank == 0 || (rank > 0 && std::get<Pc>(*eqr.first) != std::get<Pc>(prev_el))) {
           if (std::get<Pn>(*eqr.first) > min_pn)
@@ -651,7 +705,7 @@ void cluster_reads_par_inactive(bool load_balance, std::vector<tuple_t> &localVe
       for (; it != eqr.second; ++it) {
         if (std::get<Pn>(*it) == inactive_partition-1)
           std::get<Pn>(*it) = std::get<Pc>(*it);
-        uint32_t next_pn = std::get<Pn>(*it);
+        PID_TYPE next_pn = std::get<Pn>(*it);
         // if duplicate or both entries are equal (Pn==Pc)
         if (std::get<Pn>(*it) == prev_pn || std::get<Pn>(*it) == std::get<Pc>(*it)) {
           if (!found_flip) {
@@ -714,6 +768,10 @@ void cluster_reads_par_inactive(bool load_balance, std::vector<tuple_t> &localVe
     countIterations++;
     if(!rank)
       std::cout << "[RANK 0] : Iteration # " << countIterations <<"\n";
+
+    std::stringstream ss;
+    ss << "logSort.g500.iter_" << countIterations;
+//    dump_vector(localVector, comm, ss.str());
   }
 
   double time = t.elapsed() - startTime;

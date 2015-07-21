@@ -27,7 +27,7 @@
 #include <mxx/timer.hpp>
 
 #include <sstream>
-
+#include "read_graph_utils.hpp"
 
 using namespace std;
 using namespace CommandLineProcessing;
@@ -94,9 +94,11 @@ int main(int argc, char** argv)
 
   //Read all the kmers without any filter
   readFASTQFile< KmerType, includeAllKmersinAllReads<KmerType> > (cmdLineVals, localVector, readFilterFlags, readTrimLengths, MPI_COMM_WORLD);
-
-
   MP_TIMER_END_SECTION("Generating Data");
+
+
+  ReadGraphGenerator::generate(localVector, MPI_COMM_WORLD);
+  MP_TIMER_END_SECTION("Generating Read Graph");
 
 
   if (cmdLineVals.method == "standard")

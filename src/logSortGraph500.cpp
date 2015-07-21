@@ -86,7 +86,13 @@ int main(int argc, char** argv)
   //Read all the kmers without any filter
   Graph500Generator::generate(cmdLineVals, localVector, MPI_COMM_WORLD);
 
+//  dump_vector(localVector, MPI_COMM_WORLD, "logsort.g500.input");
+
   MP_TIMER_END_SECTION("Generating Data");
+
+  ensure_undirected_and_self_looping(localVector);
+  MP_TIMER_END_SECTION("Preprocess Data");
+
 
 
   if (cmdLineVals.method == "standard")
@@ -101,11 +107,17 @@ int main(int argc, char** argv)
     return 1;
   }
 
+//  dump_vector(localVector, MPI_COMM_WORLD, "logsort.g500.ccl");
+  
+
     // get the seeds,
     auto seeds = get_partition_seeds(localVector, MPI_COMM_WORLD);
-    dump_seeds(seeds, MPI_COMM_WORLD, cmdLineVals);
+    std::string seedfile = cmdLineVals.seedFile;
+    seedfile += ".";
+    seedfile += cmdLineVals.method;
+    dump_seeds(seeds, MPI_COMM_WORLD, seedfile);
 
-
+//  dump_vector(seeds, MPI_COMM_WORLD, "logsort.g500.seeds");
 
   MPI_Finalize();
   return(0);

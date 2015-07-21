@@ -15,6 +15,9 @@
 
 #include <fstream>
 #include <iostream>
+#include <utility>  // declval
+#include <type_traits> // remove_reference
+#include <limits>  // numeric_limits
 
 
 static char dummyBool;
@@ -339,14 +342,16 @@ template <typename T>
 struct KmerReduceAndMarkAsInactive {
 
   //Get layer integer id in the tuple
-  static const uint8_t keyLayer = kmerTuple::kmer;
-  static const uint8_t reductionLayer = kmerTuple::Pc;
-  static const uint8_t resultLayer = kmerTuple::Pn;
+  static constexpr uint8_t keyLayer = kmerTuple::kmer;
+  static constexpr uint8_t reductionLayer = kmerTuple::Pc;
+  static constexpr uint8_t resultLayer = kmerTuple::Pn;
 
   static layer_comparator<keyLayer, T> keycomp;
   static layer_comparator<reductionLayer, T>  pccomp;
   static layer_comparator<resultLayer, T> pncomp;
 
+  using PID_TYPE = typename std::remove_reference<decltype(std::get<resultLayer>(std::declval<T>()))>::type;
+  static constexpr PID_TYPE TMAX = std::numeric_limits<PID_TYPE>::max();
 
 
   void operator()(typename std::vector<T>::iterator start, typename std::vector<T>::iterator end,
@@ -382,7 +387,7 @@ struct KmerReduceAndMarkAsInactive {
     for(auto it = start; it!= end;)  // iterate over all segments.
     {
       // if 1 of the tuples have been marked as internal, all tuples with the same kmer are marked as internal
-      assert(std::get<resultLayer>(*it) < MAX);  //  inactive partition, should NOT get here.
+      assert(std::get<resultLayer>(*it) < TMAX);  //  inactive partition, should NOT get here.
 
       // else a kmer at partition boundary.
 
@@ -396,7 +401,7 @@ struct KmerReduceAndMarkAsInactive {
 
       // if minPc == maxPc, then all Pc are equal, and we have an internal kmer (in active partition).  mark it.
       // else it's a boundary kmer.
-      y = (minPc == maxPc) ? MAX-1 : minPc;
+      y = (minPc == maxPc) ? TMAX-1 : minPc;
 
       if (innerLoopBound.first != start && innerLoopBound.second != end)  // middle
       {
@@ -447,7 +452,7 @@ struct KmerReduceAndMarkAsInactive {
     // update the first group with maxPC and minPC.
     // if minPc == maxPc, then all Pc are equal, and we have an internal kmer (in active partition).  mark it.
     // else it's a boundary kmer.
-    y = (minPc == maxPc) ? MAX-1 : minPc;
+    y = (minPc == maxPc) ? TMAX-1 : minPc;
     for(auto it2 = start; it2 != firstEnd; ++it2)
     {
       std::get<resultLayer>(*it2) = y;
@@ -464,7 +469,7 @@ struct KmerReduceAndMarkAsInactive {
 
       // if minPc == maxPc, then all Pc are equal, and we have an internal kmer (in active partition).  mark it.
       // else it's a boundary kmer.
-      y = (minPc == maxPc) ? MAX-1 : minPc;
+      y = (minPc == maxPc) ? TMAX-1 : minPc;
 
       for(auto it2 = lastStart; it2 != end; ++it2) {
         std::get<resultLayer>(*it2) = y;
@@ -487,9 +492,11 @@ template <typename T>
 struct PartitionReduceAndMarkAsInactive {
 
   //Get layer integer id in the tuple
-  static const uint8_t keyLayer = kmerTuple::Pc;
-  static const uint8_t reductionLayer = kmerTuple::Pn;
+  static constexpr uint8_t keyLayer = kmerTuple::Pc;
+  static constexpr uint8_t reductionLayer = kmerTuple::Pn;
 
+  using PID_TYPE = typename std::remove_reference<decltype(std::get<reductionLayer>(std::declval<T>()))>::type;
+  static constexpr PID_TYPE TMAX = std::numeric_limits<PID_TYPE>::max();
 
   layer_comparator<keyLayer, T> keycomp;
   layer_comparator<reductionLayer, T>  pncomp;
@@ -526,7 +533,7 @@ struct PartitionReduceAndMarkAsInactive {
     {
       // if 1 of the tuples have been marked as inactive, the entire partition must be marked as inactive.
       // should not get here.
-      assert(std::get<reductionLayer>(*it) < MAX);
+      assert(std::get<reductionLayer>(*it) < TMAX);
 
       // else active partition to update it.
 
@@ -536,16 +543,16 @@ struct PartitionReduceAndMarkAsInactive {
 
       // Scan this bucket and find the minimum
       minPn = std::get<reductionLayer>(*(std::min_element(innerLoopBound.first, innerLoopBound.second, pncomp)));  // get min Pn
-      assert(minPn == MAX-1 || minPn <= std::get<keyLayer>(*it));
+      assert(minPn == TMAX-1 || minPn <= std::get<keyLayer>(*it));
 
       if (innerLoopBound.first != start && innerLoopBound.second != end)  // middle
       {
         // can update directly.
         // then update all entries in bucket
-        if (minPn >= (MAX - 1)) {
+        if (minPn >= (TMAX - 1)) {
           for (auto it2 = innerLoopBound.first; it2 != innerLoopBound.second; ++it2)
             // if partition has only internal kmers, then this partition is to become inactive..
-            std::get<reductionLayer>(*it2) = MAX;
+            std::get<reductionLayer>(*it2) = TMAX;
         }
         else
         {
@@ -585,10 +592,10 @@ struct PartitionReduceAndMarkAsInactive {
     // if all kmers in partition are internal, then the partition is marked inactive.
     // can update directly.
     // then update all entries in bucket
-    if (minPn >= (MAX - 1)) {
+    if (minPn >= (TMAX - 1)) {
       for(auto it2 = start; it2 != firstEnd; ++it2)
         // if partition has only internal kmers, then this partition is to become inactive..
-        std::get<reductionLayer>(*it2) = MAX;
+        std::get<reductionLayer>(*it2) = TMAX;
     }
     else
     {
@@ -602,10 +609,10 @@ struct PartitionReduceAndMarkAsInactive {
       minPn = std::get<reductionLayer>(*(std::min_element(innerLoopBound.first, innerLoopBound.second, pncomp)));
 
       // if all kmers in partition are internal, then the partition is marked inactive.
-      if (minPn >= (MAX - 1)) {
+      if (minPn >= (TMAX - 1)) {
         for(auto it2 = lastStart; it2 != end; ++it2)
           // if partition has only internal kmers, then this partition is to become inactive..
-          std::get<reductionLayer>(*it2) =  MAX;
+          std::get<reductionLayer>(*it2) =  TMAX;
       }
       else
       {
@@ -621,8 +628,11 @@ struct PartitionReduceAndMarkAsInactive {
 /// partition predicate for active Pc.  all inactive partitions are move to the back of iterator.
 template<uint8_t activePartitionLayer, typename T>
 struct BoundaryKmerPredicate {
+    using PID_TYPE = typename std::remove_reference<decltype(std::get<activePartitionLayer>(std::declval<T>()))>::type;
+    static constexpr PID_TYPE TMAX = std::numeric_limits<PID_TYPE>::max();
+
   bool operator()(const T& x) {
-    return std::get<activePartitionLayer>(x) < MAX - 1;
+    return std::get<activePartitionLayer>(x) < TMAX - 1;
   }
 };
 
@@ -631,10 +641,13 @@ struct BoundaryKmerPredicate {
 template<typename T>
 struct ActivePartitionPredicate {
 
-  static const uint8_t activePartitionLayer = kmerTuple::Pn;
+  static constexpr uint8_t activePartitionLayer = kmerTuple::Pn;
+
+  using PID_TYPE = typename std::remove_reference<decltype(std::get<activePartitionLayer>(std::declval<T>()))>::type;
+  static constexpr PID_TYPE TMAX = std::numeric_limits<PID_TYPE>::max();
 
   bool operator()(const T& x) {
-    return  std::get<activePartitionLayer>(x) < MAX;
+    return  std::get<activePartitionLayer>(x) < TMAX;
   }
 };
 
@@ -687,6 +700,9 @@ template<uint8_t terminationFlagLayer, typename T>
 bool checkTermination(typename std::vector<T>::iterator start, typename std::vector<T>::iterator end,
     MPI_Comm comm = MPI_COMM_WORLD) {
 
+  using PID_TYPE = typename std::remove_reference<decltype(std::get<terminationFlagLayer>(std::declval<T>()))>::type;
+  static PID_TYPE TMAX = std::numeric_limits<PID_TYPE>::max();
+
   int rank, p;
   MPI_Comm_rank(comm, &rank);
   MPI_Comm_size(comm, &p);
@@ -700,7 +716,7 @@ bool checkTermination(typename std::vector<T>::iterator start, typename std::vec
     MPI_Allreduce(&minY, &globalMinY, 1, mpi_dt, MPI_MIN, comm);
   }
 
-  return globalMinY == MAX;
+  return globalMinY == TMAX;
 }
 
 #endif
