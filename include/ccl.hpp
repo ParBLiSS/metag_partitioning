@@ -257,21 +257,20 @@ std::vector<T> get_partition_seeds_to_all(std::vector<T> &vector, MPI_Comm comm)
   auto temp = get_partition_seeds(vector, comm);
 
   // get the sizes
-  size_t count = temp.size();
-  std::vector<size_t> recv_counts(p, 0);
-  mxx::datatype<size_t> count_dt;
-  MPI_Allgather(&count, 1, count_dt.type(), &(recv_counts[0]), 1, count_dt.type(), comm);
+  int count = temp.size();
+  std::vector<int> recv_counts(p, 0);
+  MPI_Allgather(&count, 1, MPI_INT, &(recv_counts[0]), 1, MPI_INT, comm);
 
 
   // compute the displacements
-  std::vector<size_t> recv_displs = mxx::get_displacements(recv_counts);
+  std::vector<int> recv_displs = mxx::get_displacements(recv_counts);
 
   // allocate
   std::vector<T> seeds(recv_displs[p-1] + recv_counts[p-1]);
 
   // allgatherv
   mxx::datatype<T> dt;
-  MPI_Allgatherv(&(temp[0]), count, dt.type(), &(seeds[0]), recv_counts, recv_displs, dt.type(), comm);
+  MPI_Allgatherv(&(temp[0]), count, dt.type(), &(seeds[0]), &(recv_counts[0]), &(recv_displs[0]), dt.type(), comm);
 
   return seeds;
 
