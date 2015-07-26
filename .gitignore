@@ -13,6 +13,9 @@ Session.vim
 build/
 data/*.fastq.*
 release/
+ext/graph500/generator/*.o
+ext/graph500/generator/*.a
+ext/graph500/generator/generator_test_mpi
 
 .o
 .a

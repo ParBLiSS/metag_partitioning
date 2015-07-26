@@ -45,30 +45,28 @@ endif (MPI_FOUND)
 set(LIBRARY_OUTPUT_PATH ${PROJECT_BINARY_DIR}/lib CACHE PATH "Output directory for libraries" )
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_BINARY_DIR}/bin CACHE PATH "Output directory for applications" )
 
-include_directories("${CMAKE_SOURCE_DIR}/include")
+include_directories("${PROJECT_SOURCE_DIR}/include")
 
-add_subdirectory("${CMAKE_SOURCE_DIR}/ext/bliss")
-#add_subdirectory("${CMAKE_SOURCE_DIR}/ext/psac-copy")
+#for the config.hpp needed by bliss
+include_directories("${CMAKE_BINARY_DIR}")
 
-#include_directories("${bliss_INCLUDE_DIRS}")
-# TODO: eventually make BLISS define its own include dirs
+add_subdirectory("${PROJECT_SOURCE_DIR}/ext/bliss")
+
 include_directories("${bliss_SOURCE_DIR}/src")
 include_directories("${bliss_BINARY_DIR}")
 
-#include_directories("${CMAKE_SOURCE_DIR}/ext/psac-copy/include")
-include_directories("${CMAKE_SOURCE_DIR}/ext")
-include_directories("${CMAKE_SOURCE_DIR}/ext/graph500")
-#include_directories("/home/tpan/src/bfs_debruijn")
+include_directories("${PROJECT_SOURCE_DIR}/ext")
+include_directories("${PROJECT_SOURCE_DIR}/ext/graph500")
 
 # add own subdirectories
-add_subdirectory("${CMAKE_SOURCE_DIR}/src")
+add_subdirectory("${PROJECT_SOURCE_DIR}/src")
 
 ### Velvet
 message(STATUS "Compiling velvet")
 set (COMPILE_VELVET make MAXKMERLENGTH=63)
 execute_process(
   COMMAND ${COMPILE_VELVET}
-  WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/ext/velvet"
+  WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/ext/velvet"
   OUTPUT_QUIET ERROR_QUIET)
 
 ### Graph500 generator
@@ -76,7 +74,7 @@ message(STATUS "Compiling Graph500 generator")
 set (COMPILE_GRAPH500_GEN make -f Makefile.mpi all)
 execute_process(
 	COMMAND ${COMPILE_GRAPH500_GEN}
-	WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}/ext/graph500/generator"
+  WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/ext/graph500/generator"
   OUTPUT_QUIET ERROR_QUIET)
 	
 
