@@ -4,6 +4,8 @@ cmake_minimum_required(VERSION 2.6)
 project(Metagenomics)
 
 ##### General Compilation Settings
+#Following statement is mandatory for compilation on Cray clusters
+ENABLE_LANGUAGE(C)
 
 
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wuninitialized --std=c++11")
@@ -49,14 +51,16 @@ include_directories("${PROJECT_SOURCE_DIR}/include")
 
 #for the config.hpp needed by bliss
 include_directories("${CMAKE_BINARY_DIR}")
+include_directories("${PROJECT_SOURCE_DIR}/ext/bliss/src")
 
 add_subdirectory("${PROJECT_SOURCE_DIR}/ext/bliss")
 
-include_directories("${bliss_SOURCE_DIR}/src")
-include_directories("${bliss_BINARY_DIR}")
-
+#For mxx
 include_directories("${PROJECT_SOURCE_DIR}/ext")
+
+#For graph500 generator
 include_directories("${PROJECT_SOURCE_DIR}/ext/graph500")
+add_subdirectory("${PROJECT_SOURCE_DIR}/ext/graph500/generator")
 
 # add own subdirectories
 add_subdirectory("${PROJECT_SOURCE_DIR}/src")
@@ -68,13 +72,3 @@ execute_process(
   COMMAND ${COMPILE_VELVET}
   WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/ext/velvet"
   OUTPUT_QUIET ERROR_QUIET)
-
-### Graph500 generator
-message(STATUS "Compiling Graph500 generator")
-set (COMPILE_GRAPH500_GEN make -f Makefile.mpi all)
-execute_process(
-	COMMAND ${COMPILE_GRAPH500_GEN}
-  WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}/ext/graph500/generator"
-  OUTPUT_QUIET ERROR_QUIET)
-	
-
