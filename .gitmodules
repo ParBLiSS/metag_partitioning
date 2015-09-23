@@ -4,3 +4,6 @@
 [submodule "ext/mxx"]
 	path = ext/mxx
 	url = git@bitbucket.org:tcpan/mxx.git
+[submodule "ext/velvet"]
+	path = ext/velvet
+	url = https://cjain7@bitbucket.org/cjain7/velvetcopy.git
