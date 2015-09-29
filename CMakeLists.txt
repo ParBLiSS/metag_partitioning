@@ -55,8 +55,8 @@ include_directories("${PROJECT_SOURCE_DIR}/ext/bliss/src")
 
 add_subdirectory("${PROJECT_SOURCE_DIR}/ext/bliss")
 
-#For mxx
-include_directories("${PROJECT_SOURCE_DIR}/ext")
+#add mxx                                                                                                                                                                                   
+include_directories("${PROJECT_SOURCE_DIR}/ext/bliss/ext/")
 
 #For graph500 generator
 include_directories("${PROJECT_SOURCE_DIR}/ext/graph500")

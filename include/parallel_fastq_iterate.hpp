@@ -50,13 +50,13 @@ void readFASTQFile(     cmdLineParams &cmdLineVals,
   using FileBlockIterType = typename FileLoaderType::L1BlockType::iterator;
 
   /// DEFINE the iterator parser to get fastq records.  we don't need to parse the quality.
-  using ParserType = bliss::io::FASTQParser<FileBlockIterType, void>;
+  using ParserType = bliss::io::FASTQParser<FileBlockIterType>;
 
   /// DEFINE the basic sequence type, derived from ParserType.
   using SeqType = typename ParserType::SequenceType;
 
   /// DEFINE the transform iterator type for parsing the FASTQ file into sequence records.
-  using SeqIterType = bliss::io::SequencesIterator<ParserType>;
+  using SeqIterType = bliss::io::SequencesIterator<FileBlockIterType, bliss::io::FASTQParser>;
 
   //Get the Alphabet type
   using Alphabet = typename KmerType::KmerAlphabet;
@@ -69,7 +69,7 @@ void readFASTQFile(     cmdLineParams &cmdLineVals,
   MPI_Comm_rank(comm, &rank);
 
   //==== create file Loader (single thread per MPI process)
-  FileLoaderType loader(comm, cmdLineVals.fileName);  // this handle is alive through the entire building process.
+  FileLoaderType loader(cmdLineVals.fileName, comm);  // this handle is alive through the entire building process.
 
   //====  now process the file, one L1 block (block partition by MPI Rank) at a time
   typename FileLoaderType::L1BlockType partition = loader.getNextL1Block();
@@ -78,7 +78,8 @@ void readFASTQFile(     cmdLineParams &cmdLineVals,
   typeOfReadingOperation vec;
 
   //We should reserve the space in the vector
-  size_t read_size = loader.getRecordSize(5);
+  size_t read_size;
+  std::tie(read_size, std::ignore) = loader.getRecordSize(5);
   size_t kmers_per_read = read_size / 2 - KmerType::size;
   size_t num_reads = (partition.getRange().size() + read_size - 1) / read_size ;
   size_t num_kmers = num_reads * kmers_per_read;
