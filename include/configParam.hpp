@@ -87,6 +87,9 @@ struct cmdLineParams {
 
   //Name of the method (Only used for log-sort)
   std::string method;
+
+  //Switch for running assembly method or not
+  bool runAssembler;
 };
 
 

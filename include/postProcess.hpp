@@ -437,6 +437,8 @@ void runParallelAssembly(std::vector<Q> &localVector, cmdLineParams &cmdLineVals
   std::ofstream ofs;
 
   //Save last partition to a file
+  //Note that we could have done mpi communication here, but high imbalance among read partitions
+  //could lead to runtime memory errors
   if(iShouldTransferLastPartition)
   {
     auto innerLoopBound = findRange(localVector.rbegin(), localVector.rend(), localVector.back(), pidCmp);

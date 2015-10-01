@@ -53,6 +53,7 @@ int main(int argc, char** argv)
 
   cmd.defineOption("file", "Name of the dataset in the FASTQ format", ArgvParser::OptionRequiresValue | ArgvParser::OptionRequired);
   cmd.defineOption("velvetK", "Kmer length to pass while running velvet", ArgvParser::OptionRequiresValue | ArgvParser::OptionRequired);
+  cmd.defineOption("assemblyOff", "Optional. No value required.", ArgvParser::NoOptionAttribute);
 
   //Global timer for calculating total time
   mxx::timer t;
@@ -76,6 +77,14 @@ int main(int argc, char** argv)
     std::cout << "Filename : " <<  cmdLineVals.fileName << "\n"; 
     std::cout << "Velvet kmer size : " << cmdLineVals.velvetKmerSize << "\n";
   }
+
+  if (cmd.foundOption("assemblyOff"))
+  {
+    cmdLineVals.runAssembler = false;
+    if(!rank) std::cout << "Assembly turned off\n";
+  }
+  else
+    cmdLineVals.runAssembler = true;
 
   /*
    * PREPROCESSING PHASE
@@ -195,10 +204,11 @@ int main(int argc, char** argv)
 
   MP_TIMER_END_SECTION("Kmer Partition size histogram generated");
 
-  finalPostProcessing<KmerType>(localVector, readFilterFlags, readTrimLengths, cmdLineVals);
+  if(cmdLineVals.runAssembler == true)
+    finalPostProcessing<KmerType>(localVector, readFilterFlags, readTrimLengths, cmdLineVals);
 
   MPI_Barrier(MPI_COMM_WORLD);
-  MP_TIMER_END_SECTION("Parallel assembly completed");
+  MP_TIMER_END_SECTION("Parallel assembly phase completed");
 
   double time = t.elapsed() - startTime;
   if(!rank)
