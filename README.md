@@ -31,7 +31,7 @@ Inside the build directory,
     mpirun -np <COUNT OF PROCESSES> ./bin/metaG --file <FASTQ_FILE> --velvetK <KMER_SIZE_FOR_ASSEMBLY>
     Eg. mpirun -np 8 ./bin/metaG --file sample.fastq --velvetK 45
 
-We have some sample files in the data folder of the code, you can use those for trial runs.
+We have some sample files in the data folder of the code, you can use those for trial runs. You should see a file called contigs.fa containing all the assembled contigs after the run is successful. 
 
 ### Customization (required) ###
 
