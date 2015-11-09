@@ -48,6 +48,8 @@ External git submodules (automatically downloaded and compiled):
 * [velvet](https://github.com/dzerbino/velvet)
 * [R-MAT generator](http://www.graph500.org/)
 
+BLISS's release to public is still pending. Kindly email me (cjain7 at gatech.edu) for requesting the access.
+
 ### Cite ###
 
 Please cite the following publication if you are using this code for your research:
