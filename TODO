@@ -1,7 +1,0 @@
-Urgent TODOs
-
-
-
-Important TODOs
-- Make fastq iterator work for fastq files with different read length. 
-- Check how to deal with 'N' characters in the fastq file
