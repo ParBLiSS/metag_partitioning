@@ -8,7 +8,7 @@
 
 ### Introduction ###
 
-Parallel metagenomic assembler designed to handle very large datasets. Program identifies the disconnected subgraphs in the de Bruijn graph, partitions the input dataset and runs a popular assember **Velvet** independently on the partitions. This software is a high performance version of the [khmer](khmer.readthedocs.org) library for assembly. 
+Parallel metagenomic assembler designed to handle very large datasets. Program identifies the disconnected subgraphs in the de Bruijn graph, partitions the input dataset and runs a popular assember **Velvet** independently on the partitions. This software is a high performance version of the [khmer](http://khmer.readthedocs.org/en/v2.0/) library for assembly. 
 
 The whole algorithm relies on the existence of disconnected components in the de Bruijn graph for the performance gains. We found that this assumption is generally true for the currently available soil datasets from forests and agriculture land.
 
