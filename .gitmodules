@@ -1,6 +1,6 @@
-[submodule "ext/bliss"]
-	path = ext/bliss
-	url = git@bitbucket.org:AluruLab/bliss.git
 [submodule "ext/velvet"]
 	path = ext/velvet
 	url = https://cjain7@bitbucket.org/cjain7/velvetcopy.git
+[submodule "ext/bliss"]
+	path = ext/bliss
+	url = https://github.com/ParBLiSS/kmerind.git
