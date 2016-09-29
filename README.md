@@ -43,7 +43,7 @@ It requires C++ 11 features (gcc 4.7 or above) and MPI
 
 External git submodules (automatically downloaded and compiled):
 
-* [BLISS](https://bitbucket.org/AluruLab/bliss)
+* [kmerind](https://github.com/ParBLiSS/kmerind)
 * [mxx](https://github.com/patflick/mxx)
 * [velvet](https://github.com/dzerbino/velvet)
 * [R-MAT generator](http://www.graph500.org/)
